@@ -11,7 +11,14 @@
     "appId": "com.towerheroes.macro",
     "productName": "Tower Heroes Macro",
     "files": [
-      "**/*"
+      "**/*",
+      "!dist/**",
+      "!CLAUDE.md",
+      "!.claude/**",
+      "!README.md",
+      "!LICENSE",
+      "!.gitignore",
+      "!*.log"
     ],
     "asar": false,
     "win": {

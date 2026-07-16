@@ -9,8 +9,9 @@ stop.txt
 towerheroes-stats.txt
 *.log
 
-# Local tooling
+# Local tooling / internal notes
 .claude/
+CLAUDE.md
 
 # OS junk
 Thumbs.db

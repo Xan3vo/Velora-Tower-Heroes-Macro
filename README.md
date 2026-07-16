@@ -8,11 +8,14 @@ a floating status overlay, and Discord webhook reporting.
 
 <img src="Images/Kart1.webp" alt="Kart Kid" height="96" /> <img src="Images/Slimeking1.webp" alt="Slime King" height="96" />
 
+![Release](https://img.shields.io/github/v/release/Xan3vo/Velora-Tower-Heroes-Macro?color=brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-29-47848F?logo=electron&logoColor=white)
 ![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v1.1-334455)
 ![OCR](https://img.shields.io/badge/OCR-Windows.Media.Ocr-2ea44f)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+### [⬇️ Download the latest installer](https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/releases/latest)
 
 </div>
 
@@ -50,6 +53,13 @@ win, collects, and loops — for hours, unattended.
 
 ## 🚀 Quick start
 
+**Easiest:** grab the installer from the [latest release](https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/releases/latest), run it, done.
+
+> Windows SmartScreen may warn because the installer isn't code-signed —
+> click **More info → Run anyway**.
+
+**From source:**
+
 ```bash
 git clone https://github.com/Xan3vo/Velora-Tower-Heroes-Macro.git
 cd Velora-Tower-Heroes-Macro
@@ -57,7 +67,7 @@ npm install
 npm start
 ```
 
-Build a Windows installer (NSIS):
+Build the Windows installer (NSIS) yourself:
 
 ```bash
 npm run build   # → dist/
@@ -120,7 +130,6 @@ and fixable from the in-app calibrator.
 | `CastleTown_Easy.ahk` | The macro engine (shared by all supported maps) |
 | `ocr.ps1` | Windows.Media.Ocr wrapper — screen-region → text, with scale-retry ladder |
 | `PixelInspector.ahk` | Dev tool: live cursor position/color logger for calibration |
-| `CLAUDE.md` | Engineering notes (architecture, calibration history, gotchas) |
 
 ## ⚠️ Disclaimer
 
