@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLifetimeStats: () => ipcRenderer.invoke('get-lifetime-stats'),
   getOcrDefaults: () => ipcRenderer.invoke('get-ocr-defaults'),
   testOcrRegion: (region) => ipcRenderer.invoke('test-ocr-region', region),
+  onUpdateEvent: (cb) => ipcRenderer.on('update-event', (_, data) => cb(data)),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 });

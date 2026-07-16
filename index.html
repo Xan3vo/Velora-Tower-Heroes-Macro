@@ -715,6 +715,47 @@
     color: #8a90a0;
     text-align: center;
   }
+
+  /* AUTO-UPDATE TOAST */
+  #update-toast {
+    position: fixed;
+    left: 14px; right: 14px; bottom: 12px;
+    background: linear-gradient(160deg, #1a2130 0%, #151a26 100%);
+    border: 1px solid #2a2f3e;
+    border-radius: 10px;
+    padding: 12px 14px;
+    z-index: 800;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    transform: translateY(140%);
+    opacity: 0;
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s;
+  }
+  #update-toast.show { transform: translateY(0); opacity: 1; }
+  .update-row { display: flex; align-items: center; gap: 12px; }
+  .update-ico { font-size: 20px; flex: none; }
+  .update-text { flex: 1; min-width: 0; }
+  .update-title { font-size: 13px; font-weight: 700; color: #e8eaf0; }
+  .update-sub { font-size: 11.5px; color: #9aa1b3; margin-top: 2px; }
+  .update-actions { display: flex; gap: 8px; flex: none; }
+  .update-btn {
+    border: none; border-radius: 7px; padding: 7px 14px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
+  }
+  .update-btn.primary { background: linear-gradient(180deg, #3670f2 0%, #2258e0 100%); color: #fff; }
+  .update-btn.primary:hover { filter: brightness(1.12); }
+  .update-btn.ghost { background: #232a3c; color: #9aa1b3; border: 1px solid #2a2f3e; }
+  .update-btn.ghost:hover { color: #e8eaf0; }
+  #update-progress { margin-top: 10px; display: none; }
+  #update-progress.show { display: block; }
+  .update-bar { height: 6px; border-radius: 3px; background: #232a3c; overflow: hidden; }
+  #update-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #3670f2, #6699ff);
+    border-radius: 3px;
+    transition: width 0.25s ease;
+  }
+  #update-stats { margin-top: 5px; font-size: 11px; color: #8a90a0; text-align: right; }
   </style>
 </head>
 <body>
@@ -991,6 +1032,25 @@
 </div>
 
 
+
+<!-- Auto-update toast (hidden until the main process reports an update) -->
+<div id="update-toast">
+  <div class="update-row">
+    <div class="update-ico">🚀</div>
+    <div class="update-text">
+      <div class="update-title" id="update-title">Update available</div>
+      <div class="update-sub" id="update-sub"></div>
+    </div>
+    <div class="update-actions">
+      <button class="update-btn primary" id="update-primary">Update now</button>
+      <button class="update-btn ghost" id="update-later">Later</button>
+    </div>
+  </div>
+  <div id="update-progress">
+    <div class="update-bar"><div id="update-fill"></div></div>
+    <div id="update-stats"></div>
+  </div>
+</div>
 
 <script>
   var state = {
@@ -1622,6 +1682,95 @@
       setTimeout(()=>{ intro.style.display = 'none'; }, 750);
     }, 3200);
   })();
+
+  // ---- Auto-update toast ----------------------------------------------
+  // Driven by update-event messages from the main process (electron-updater).
+  // Flow: available → "Update now" → progress bar → downloaded →
+  // "Restart & install". "Later" just hides the toast; a downloaded update
+  // still installs silently on the next normal quit.
+  var updateUI = {
+    toast:    document.getElementById('update-toast'),
+    title:    document.getElementById('update-title'),
+    sub:      document.getElementById('update-sub'),
+    primary:  document.getElementById('update-primary'),
+    later:    document.getElementById('update-later'),
+    progress: document.getElementById('update-progress'),
+    fill:     document.getElementById('update-fill'),
+    stats:    document.getElementById('update-stats')
+  };
+  var updatePhase = 'idle';   // idle | available | downloading | ready
+  var appVersion = '';
+
+  function fmtMB(bytes) { return (bytes / (1024 * 1024)).toFixed(1); }
+
+  function handleUpdateEvent(evt) {
+    if (!evt || !evt.type) return;
+    if (evt.type === 'available') {
+      updatePhase = 'available';
+      updateUI.title.textContent = 'Update available';
+      updateUI.sub.textContent = 'Velora v' + evt.version + ' is out' + (appVersion ? ' — you have v' + appVersion : '');
+      updateUI.primary.textContent = 'Update now';
+      updateUI.primary.style.display = '';
+      updateUI.later.textContent = 'Later';
+      updateUI.progress.classList.remove('show');
+      updateUI.toast.classList.add('show');
+    } else if (evt.type === 'progress') {
+      updatePhase = 'downloading';
+      var pct = Math.max(0, Math.min(100, evt.percent || 0));
+      updateUI.title.textContent = 'Downloading update…';
+      updateUI.sub.textContent = 'The new version is on its way — the app stays usable';
+      updateUI.primary.style.display = 'none';
+      updateUI.later.textContent = 'Hide';
+      updateUI.progress.classList.add('show');
+      updateUI.fill.style.width = pct.toFixed(1) + '%';
+      var bits = [pct.toFixed(0) + '%'];
+      if (evt.total) bits.push(fmtMB(evt.transferred || 0) + ' / ' + fmtMB(evt.total) + ' MB');
+      if (evt.bytesPerSecond) bits.push(fmtMB(evt.bytesPerSecond) + ' MB/s');
+      updateUI.stats.textContent = bits.join('  ·  ');
+      updateUI.toast.classList.add('show');
+    } else if (evt.type === 'downloaded') {
+      updatePhase = 'ready';
+      updateUI.title.textContent = 'Update ready 🎉';
+      updateUI.sub.textContent = 'Velora v' + evt.version + ' installs when the app restarts';
+      updateUI.primary.textContent = 'Restart & install';
+      updateUI.primary.style.display = '';
+      updateUI.later.textContent = 'On next launch';
+      updateUI.progress.classList.remove('show');
+      updateUI.toast.classList.add('show');
+    } else if (evt.type === 'error') {
+      // Only bother the user if a download was in flight; background update
+      // checks fail quietly (offline, rate limits, ...).
+      if (updatePhase === 'downloading') {
+        updateUI.title.textContent = 'Update failed';
+        updateUI.sub.textContent = 'Could not download the update — it will retry later';
+        updateUI.primary.style.display = 'none';
+        updateUI.later.textContent = 'Dismiss';
+        updateUI.progress.classList.remove('show');
+        setTimeout(function () { updateUI.toast.classList.remove('show'); }, 6000);
+      }
+      updatePhase = 'idle';
+    }
+  }
+  window.handleUpdateEvent = handleUpdateEvent;
+
+  updateUI.primary.addEventListener('click', function () {
+    if (updatePhase === 'available' && window.electronAPI && window.electronAPI.downloadUpdate) {
+      window.electronAPI.downloadUpdate();
+      handleUpdateEvent({ type: 'progress', percent: 0, transferred: 0, total: 0 });
+    } else if (updatePhase === 'ready' && window.electronAPI && window.electronAPI.installUpdate) {
+      window.electronAPI.installUpdate();
+    }
+  });
+  updateUI.later.addEventListener('click', function () {
+    updateUI.toast.classList.remove('show');
+  });
+
+  if (window.electronAPI && window.electronAPI.onUpdateEvent) {
+    window.electronAPI.onUpdateEvent(handleUpdateEvent);
+    if (window.electronAPI.getAppVersion) {
+      window.electronAPI.getAppVersion().then(function (v) { appVersion = v; });
+    }
+  }
 
 </script>
 </body>

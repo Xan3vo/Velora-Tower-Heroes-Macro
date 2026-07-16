@@ -1151,7 +1151,55 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   });
 });
 
-app.whenReady().then(createWindow);
+// ---- Auto-update (GitHub releases via electron-updater) --------------------
+// Checks shortly after launch and every 4h. Nothing downloads until the user
+// clicks "Update now" in the renderer's toast (autoDownload=false). Once
+// downloaded, "Restart & install" applies it immediately (quitAndInstall —
+// which fires before-quit, so a running macro is stopped first); if the user
+// picks "later", it still installs silently on the next normal quit.
+let autoUpdater = null;
+try { autoUpdater = require('electron-updater').autoUpdater; } catch (err) { /* optional dep */ }
+
+function sendUpdateEvent(payload) {
+  const mainWin = BrowserWindow.getAllWindows().find((w) => w !== statusWindow);
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('update-event', payload);
+}
+
+function setupAutoUpdater() {
+  if (!autoUpdater || !app.isPackaged) return; // dev runs have no update feed
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-available', (info) => sendUpdateEvent({ type: 'available', version: info.version }));
+  autoUpdater.on('download-progress', (p) => sendUpdateEvent({
+    type: 'progress',
+    percent: p.percent,
+    transferred: p.transferred,
+    total: p.total,
+    bytesPerSecond: p.bytesPerSecond,
+  }));
+  autoUpdater.on('update-downloaded', (info) => sendUpdateEvent({ type: 'downloaded', version: info.version }));
+  autoUpdater.on('error', (err) => sendUpdateEvent({ type: 'error', message: String((err && err.message) || err) }));
+  const check = () => { autoUpdater.checkForUpdates().catch(() => { /* offline is fine */ }); };
+  setTimeout(check, 5000);
+  setInterval(check, 4 * 60 * 60 * 1000);
+}
+
+ipcMain.handle('download-update', () => {
+  if (!autoUpdater || !app.isPackaged) return false;
+  autoUpdater.downloadUpdate().catch((err) => sendUpdateEvent({ type: 'error', message: String((err && err.message) || err) }));
+  return true;
+});
+ipcMain.handle('install-update', () => {
+  if (!autoUpdater || !app.isPackaged) return false;
+  autoUpdater.quitAndInstall(false, true);
+  return true;
+});
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+app.whenReady().then(() => {
+  createWindow();
+  setupAutoUpdater();
+});
 
 // Closing the app must take the macro down with it — an orphaned AHK process
 // keeps clicking the screen with no way to stop it except Task Manager (and a

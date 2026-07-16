@@ -1,6 +1,8 @@
 {
   "name": "tower-heroes-macro",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "description": "Velora - auto-farmer for Roblox Tower Heroes",
+  "author": "Xan3vo",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -10,6 +12,11 @@
   "build": {
     "appId": "com.towerheroes.macro",
     "productName": "Tower Heroes Macro",
+    "publish": {
+      "provider": "github",
+      "owner": "Xan3vo",
+      "repo": "Velora-Tower-Heroes-Macro"
+    },
     "files": [
       "**/*",
       "!dist/**",
@@ -40,6 +47,7 @@
     "electron-packager": "^17.1.2"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   }
