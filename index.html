@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tower Heroes Macro</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #141720;
+      color: #e8eaf0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      user-select: none;
+      overflow: hidden;
+      width: 720px;
+      height: 520px;
+    }
+
+    /* TITLE BAR */
+    #titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-bottom: none;
+      background: #141720;
+      -webkit-app-region: drag;
+      height: 40px;
+    }
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #e8eaf0;
+    }
+    .title-logo {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      object-fit: cover;
+    }
+    .win-controls {
+      display: flex;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+    .circle-btn {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.25);
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      background: #888;
+      padding: 0;
+    }
+    .circle-btn.red { background: #d9534f; }
+    .circle-btn.orange { background: #f0ad4e; }
+    .circle-btn:hover { filter: brightness(1.1); }
+
+    /* MAIN */
+    #content {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .top-row {
+      display: flex;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    /* PANEL */
+    .panel {
+      padding: 16px;
+      min-height: 210px;
+      border-radius: 10px;
+      border: 1px solid #2a2f3e;
+    }
+
+    .panel-title {
+      font-style: italic;
+      font-weight: 700;
+      font-size: 13px;
+      color: #e8eaf0;
+      margin-bottom: 11px;
+      display: block;
+    }
+
+    /* MAP GRID */
+    #map-panel { flex: 1; }
+    .map-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      row-gap: 8px;
+      column-gap: 20px;
+    }
+
+    /* MODE LIST */
+    #mode-panel { min-width: 140px; }
+    .mode-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* CHECKBOX ROW */
+    .cb-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 1px 0;
+    }
+    .cb-row:hover .cb-label { color: #e8eaf0; }
+
+    .cb-box {
+      width: 14px;
+      height: 14px;
+      min-width: 14px;
+      border: 1.5px solid #3a4050;
+      border-radius: 3px;
+      background: #1c2030;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cb-box.checked {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    .cb-tick {
+      display: none;
+      width: 4px;
+      height: 8px;
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(45deg) translate(-1px, -1px);
+    }
+    .cb-box.checked .cb-tick { display: block; }
+
+    .cb-label {
+      font-size: 13px;
+      color: #e8eaf0;
+      white-space: nowrap;
+    }
+
+    /* CHARACTERS */
+    .chars-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .chars-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e8eaf0;
+    }
+    .char-slots {
+      display: flex;
+      gap: 10px;
+    }
+    .char-slot {
+      width: 90px;
+      height: 108px;
+      border: 1px solid #2a2f3e;
+      border-radius: 6px;
+      background: #1c2030;
+      cursor: pointer;
+      position: relative;
+      overflow: visible;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .char-slot:hover { border-color: #6b7280; }
+    .char-slot.selected {
+      border: 2px solid #2563eb;
+      box-shadow: 0 0 10px rgba(37,99,235,0.2);
+    }
+    .char-slot.has-character {
+      border: 2px solid #2563eb;
+      box-shadow: 0 0 10px rgba(37,99,235,0.35);
+    }
+    /* selected AND has character gets stronger blue */
+    .char-slot.selected.has-character {
+      border: 2px solid #2563eb;
+      box-shadow: 0 0 12px rgba(37,99,235,0.55);
+    }
+
+    .char-slot[data-name]:hover::after {
+      content: attr(data-name);
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 112%;
+      white-space: nowrap;
+      padding: 5px 9px;
+      border-radius: 6px;
+      background: rgba(20, 25, 40, 0.95);
+      color: #f8fafc;
+      font-size: 12px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+      z-index: 10;
+      opacity: 1;
+      pointer-events: none;
+    }
+
+    .char-slot[data-name]:hover::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 104%;
+      border: 6px solid transparent;
+      border-top-color: rgba(20, 25, 40, 0.95);
+      z-index: 10;
+    }
+
+    /* BOTTOM BAR */
+    #bottombar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-top: none;
+      background: #141720;
+    }
+    .action-btns { display: flex; gap: 8px; }
+    .action-btn {
+      padding: 7px 22px;
+      border-radius: 6px;
+      border: 1px solid #2a2f3e;
+      background: #1c2030;
+      color: #6b7280;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .action-btn:hover { background: #242938; color: #e8eaf0; }
+    .action-btn.active {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .status-panel {
+      display: none !important;
+    }
+    .status-panel.info { border-color: #2563eb; background: rgba(37, 99, 235, 0.18); color: #dbe9ff; }
+    .status-panel.warning { border-color: #f59e0b; background: rgba(245, 158, 11, 0.17); color: #fff1d6; }
+    .status-panel.error { border-color: #dc2626; background: rgba(220, 38, 38, 0.17); color: #ffe5e5; }
+
+    .hidden { display: none !important; }
+
+    /* SETTINGS */
+    .icon-btn {
+      -webkit-app-region: no-drag;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      color: #8a90a0;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .icon-btn:hover { color: #e8eaf0; background: rgba(255,255,255,0.06); }
+
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 12, 20, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 5000;
+      opacity: 0;
+      transition: opacity 0.18s ease;
+    }
+    .settings-overlay.open { display: flex; opacity: 1; }
+
+    .settings-card {
+      width: 380px;
+      max-width: calc(100% - 40px);
+      background: #171b26;
+      border: 1px solid #2a2f3e;
+      border-radius: 12px;
+      padding: 18px 20px 20px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+    }
+    .webhook-card, .debug-card { max-height: calc(100vh - 50px); overflow-y: auto; }
+    .debug-card { width: 440px; }
+
+    .settings-tabs {
+      display: flex;
+      gap: 6px;
+      margin: 2px 0 12px;
+      padding: 4px;
+      background: #12161f;
+      border: 1px solid #232838;
+      border-radius: 9px;
+    }
+    .settings-tab {
+      flex: 1;
+      padding: 7px 0;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: #8a90a0;
+      font-size: 12.5px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .settings-tab:hover { color: #cdd6ef; }
+    .settings-tab.active { background: #1c2233; border-color: #2a3350; color: #fff; }
+    .settings-tabpane { display: none; }
+    .settings-tabpane.active { display: block; }
+    /* Themed scrollbar for the scrollable modals. */
+    .webhook-card::-webkit-scrollbar, .debug-card::-webkit-scrollbar { width: 10px; }
+    .webhook-card::-webkit-scrollbar-track, .debug-card::-webkit-scrollbar-track { background: transparent; }
+    .webhook-card::-webkit-scrollbar-thumb, .debug-card::-webkit-scrollbar-thumb {
+      background: #2a3350;
+      border-radius: 6px;
+      border: 3px solid #171b26; /* inset look: matches the card background */
+    }
+    .webhook-card::-webkit-scrollbar-thumb:hover, .debug-card::-webkit-scrollbar-thumb:hover { background: #3a4670; }
+
+    .debug-warning {
+      background: rgba(220, 130, 40, 0.10);
+      border: 1px solid rgba(224, 150, 66, 0.45);
+      color: #e5b076;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 11.5px;
+      line-height: 1.45;
+      margin-bottom: 4px;
+    }
+    .debug-region { padding: 12px 0; border-top: 1px solid #232838; }
+    .debug-inputs { display: flex; align-items: center; gap: 7px; margin-top: 8px; flex-wrap: wrap; }
+    .debug-inputs .coord-label { font-size: 11px; color: #8a90a0; }
+    .webhook-input.ocr-num { width: 52px; flex: none; padding: 6px 4px; text-align: center; }
+    /* Hide number-input spinners — they eat most of a 58px box. */
+    .ocr-num::-webkit-outer-spin-button, .ocr-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .tool-btn.debug-test-btn { width: auto; flex: none; padding: 6px 13px; font-size: 12px; }
+    .debug-result { margin-top: 7px; min-height: 14px; word-break: break-all; }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .settings-title { font-weight: 700; font-size: 15px; color: #e8eaf0; }
+    .settings-close-x {
+      cursor: pointer;
+      color: #8a90a0;
+      font-size: 22px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .settings-close-x:hover { color: #e8eaf0; }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px 0;
+      border-top: 1px solid #232838;
+    }
+    .settings-row-text { display: flex; flex-direction: column; gap: 3px; }
+    .settings-label { font-size: 13px; color: #e8eaf0; }
+    .settings-desc { font-size: 11px; color: #8a90a0; line-height: 1.35; }
+
+    .toggle {
+      flex: none;
+      width: 42px;
+      height: 24px;
+      border-radius: 12px;
+      background: #2a2f3e;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .toggle.on { background: #2563eb; }
+    .toggle-knob {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: left 0.15s ease;
+    }
+    .toggle.on .toggle-knob { left: 21px; }
+
+    .settings-tools {
+      margin-top: 4px;
+      padding-top: 14px;
+      border-top: 1px solid #232838;
+    }
+    .tool-btn {
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 7px;
+      border: 1px solid #2a3350;
+      background: #1c2233;
+      color: #cdd6ef;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .tool-btn:hover { background: #232c44; border-color: #3a4670; color: #fff; }
+    .settings-tools .settings-desc { margin-top: 7px; }
+
+    .webhook-input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 7px;
+      border: 1px solid #2a3350;
+      background: #1c2233;
+      color: #dfe6f7;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .webhook-input:focus { border-color: #3a4670; }
+    .webhook-input::placeholder { color: #5b647c; }
+
+    @keyframes vspin   { to { transform: rotate(360deg);  } }
+    @keyframes vspin-r { to { transform: rotate(-360deg); } }  @keyframes ring-spin   { to { transform: rotate(360deg);  } }
+  @keyframes ring-spin-r { to { transform: rotate(-360deg); } }
+  @keyframes portal-pulse {
+    0%,100% { box-shadow: 0 0 80px 25px rgba(80,120,255,0.3), inset 0 0 60px rgba(80,120,255,0.2); }
+    50%     { box-shadow: 0 0 120px 50px rgba(80,120,255,0.5), inset 0 0 100px rgba(80,120,255,0.35); }
+  }
+  @keyframes energy-expand {
+    0%   { opacity:0.8; transform:scale(0); }
+    100% { opacity:0;   transform:scale(4); }
+  }
+
+  /* INTRO */
+  #intro {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    background: radial-gradient(circle at 50% 45%, #0d1526 0%, #080c14 55%, #05070d 100%);
+    opacity: 1;
+    transition: opacity 0.7s ease;
+  }
+  #intro.hide { opacity: 0; }
+
+  #velora-logo {
+    display: flex;
+    padding-left: 0.3em;            /* offset letter-spacing so it reads centered */
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-weight: 900;
+    font-size: 66px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    animation: velora-glow 2.6s ease-in-out 1s infinite;
+  }
+  #velora-logo span {
+    color: transparent;
+    -webkit-text-stroke: 2px #6699ff;
+    opacity: 0;
+    transform: translateY(18px);
+    animation: velora-letter 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    animation-delay: calc(var(--i) * 0.09s + 0.15s);
+  }
+  #intro.hide #velora-logo {
+    transform: scale(1.06);
+    transition: transform 0.7s ease;
+  }
+  @keyframes velora-letter {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes velora-glow {
+    0%, 100% { filter: drop-shadow(0 0 6px rgba(102, 153, 255, 0.35)); }
+    50%      { filter: drop-shadow(0 0 20px rgba(130, 185, 255, 0.8)); }
+  }
+
+  #velora-line {
+    width: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #6699ff, transparent);
+    opacity: 0;
+    animation: velora-line 0.9s ease-out 0.8s forwards;
+  }
+  @keyframes velora-line {
+    to { width: 280px; opacity: 1; }
+  }
+  #intro.hide #velora-line { opacity: 0; transition: opacity 0.5s ease; }
+
+  /* ===== MODERN POLISH ===== */
+  body {
+    background: radial-gradient(1200px 520px at 50% -12%, #1c2436 0%, #141720 62%);
+  }
+  #titlebar, #bottombar { background: transparent; }
+
+  .left-tools { display: flex; gap: 6px; -webkit-app-region: no-drag; }
+
+  .panel {
+    border: 1px solid #262d40;
+    background: linear-gradient(160deg, #1a2130 0%, #151a26 100%);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .action-btn {
+    transition: background .15s ease, color .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .action-btn.active {
+    background: linear-gradient(180deg, #3670f2 0%, #2258e0 100%);
+    border-color: #4179f6;
+    box-shadow: 0 4px 16px rgba(37,99,235,0.42);
+  }
+
+  .settings-overlay { backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+  .settings-card {
+    background: linear-gradient(165deg, #1a2030 0%, #141826 100%);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  /* ===== GUIDE ===== */
+  .guide-card { width: 520px; }
+  .guide-body {
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 6px;
+    margin-top: 2px;
+  }
+  .guide-body::-webkit-scrollbar { width: 8px; }
+  .guide-body::-webkit-scrollbar-thumb { background: #2a3247; border-radius: 4px; }
+  .guide-body::-webkit-scrollbar-thumb:hover { background: #3a4670; }
+  .guide-body::-webkit-scrollbar-track { background: transparent; }
+  .guide-body b { color: #eef1f8; font-weight: 600; }
+
+  /* Guide tabs — separate classes from .settings-tab so selectSettingsTab's
+     global querySelectorAll can never toggle these (and vice versa). */
+  .guide-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 2px 0 12px;
+    padding: 4px;
+    background: #12161f;
+    border: 1px solid #232838;
+    border-radius: 9px;
+  }
+  .guide-tab {
+    flex: 1;
+    padding: 7px 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #8a90a0;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .guide-tab:hover { color: #cdd6ef; }
+  .guide-tab.active { background: #1c2233; border-color: #2a3350; color: #fff; }
+  .guide-tabpane { display: none; }
+  .guide-tabpane.active { display: block; animation: guidefade 0.18s ease; }
+  @keyframes guidefade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  .guide-h {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #6f9bff;
+    margin: 14px 0 10px;
+  }
+  .guide-h:first-child { margin-top: 2px; }
+
+  /* Numbered step cards */
+  .gsteps { display: flex; flex-direction: column; gap: 8px; }
+  .gstep {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 10px 12px;
+    background: #1a2030;
+    border: 1px solid #242c40;
+    border-radius: 9px;
+  }
+  .gstep-num {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: linear-gradient(160deg, #3670f2, #2a52c0);
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(54,112,242,0.35);
+  }
+  .gstep-text { font-size: 12.5px; color: #cdd3e2; line-height: 1.5; }
+  .gstep-text .sub { display: block; margin-top: 2px; font-size: 11px; color: #8a90a0; }
+
+  /* Requirement chips */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    background: #1a2030;
+    border: 1px solid #2a3350;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #cdd6ef;
+  }
+  .chip .cdot { width: 6px; height: 6px; border-radius: 50%; background: #3670f2; }
+
+  /* Hotkeys */
+  .kbd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 16px; }
+  .kbd-item { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: #cdd3e2; }
+  .kbd {
+    min-width: 30px;
+    padding: 3px 8px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #dfe6f7;
+    background: #232b3e;
+    border: 1px solid #333c54;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+
+  /* Callouts */
+  .callout {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 9px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    margin-top: 12px;
+  }
+  .callout .ico { flex: none; font-size: 13px; margin-top: 1px; }
+  .callout.tip  { background: rgba(46, 190, 120, 0.08);  border: 1px solid rgba(46, 190, 120, 0.35);  color: #9fdcbe; }
+  .callout.warn { background: rgba(220, 130, 40, 0.10);  border: 1px solid rgba(224, 150, 66, 0.45);  color: #e5b076; }
+  .callout b { color: inherit; }
+
+  /* "How it works" phase timeline */
+  .flow { position: relative; display: flex; flex-direction: column; gap: 0; }
+  .flow-item { position: relative; display: flex; gap: 12px; padding-bottom: 14px; }
+  .flow-item:last-child { padding-bottom: 0; }
+  .flow-rail { flex: none; width: 22px; display: flex; flex-direction: column; align-items: center; }
+  .flow-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    margin-top: 4px;
+    border-radius: 50%;
+    background: #3670f2;
+    box-shadow: 0 0 0 3px rgba(54,112,242,0.18);
+  }
+  .flow-line { flex: 1; width: 2px; margin-top: 4px; background: #26304a; border-radius: 1px; }
+  .flow-item:last-child .flow-line { display: none; }
+  .flow-title { display: block; font-size: 12.5px; font-weight: 600; color: #e8eaf0; }
+  .flow-desc { display: block; font-size: 11.5px; color: #8f96a8; line-height: 1.45; margin-top: 2px; }
+
+  /* FAQ / fixes */
+  .faq { display: flex; flex-direction: column; gap: 8px; }
+  .faq-item {
+    background: #1a2030;
+    border: 1px solid #242c40;
+    border-radius: 9px;
+    padding: 10px 12px;
+  }
+  .faq-q { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; font-weight: 600; color: #e8eaf0; line-height: 1.4; }
+  .faq-q .ico { flex: none; }
+  .faq-a { margin-top: 5px; font-size: 11.5px; color: #9aa1b3; line-height: 1.5; }
+
+  .guide-foot {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #232838;
+    font-size: 11.5px;
+    color: #8a90a0;
+    text-align: center;
+  }
+  </style>
+</head>
+<body>
+
+<div id="intro">
+  <div id="velora-logo" aria-label="VELORA">
+    <span style="--i:0">V</span><span style="--i:1">E</span><span style="--i:2">L</span><span style="--i:3">O</span><span style="--i:4">R</span><span style="--i:5">A</span>
+  </div>
+  <div id="velora-line"></div>
+</div>
+
+<div id="titlebar">
+  <div class="title-left">
+    <img src="logo.png" alt="Logo" class="title-logo" onerror="this.onerror=null;this.src='Logo.ico';" />
+    <span>Tower Heroes Macro</span>
+  </div>
+  <div class="win-controls">
+    <button class="circle-btn orange" onclick="window.electronAPI && window.electronAPI.minimize()" title="Minimize"></button>
+    <button class="circle-btn red" onclick="window.electronAPI && window.electronAPI.close()" title="Close"></button>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL (tabbed: General / Discord / Advanced) -->
+<div id="settings-overlay" class="settings-overlay">
+  <div class="settings-card debug-card">
+    <div class="settings-header">
+      <span id="settings-title" class="settings-title">Settings</span>
+      <span id="settings-close" class="settings-close-x" title="Close">&times;</span>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" type="button" data-tab="general">General</button>
+      <button class="settings-tab" type="button" data-tab="discord">Discord</button>
+      <button class="settings-tab" type="button" data-tab="advanced">Advanced</button>
+    </div>
+
+    <div id="tab-general" class="settings-tabpane active">
+      <div id="settings-rows"></div>
+      <div id="lifetime-stats" class="settings-desc" style="margin-top: 12px;"></div>
+    </div>
+
+    <div id="tab-discord" class="settings-tabpane">
+      <div style="margin-bottom: 12px;">
+        <div style="display: flex; gap: 8px;">
+          <input id="webhook-url" class="webhook-input" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="https://discord.com/api/webhooks/..." style="flex: 1;" />
+          <button id="webhook-test-btn" class="tool-btn debug-test-btn" type="button" title="Send a test message to this webhook">Test</button>
+        </div>
+        <div class="settings-desc" style="margin-top: 6px;">Messages get posted to this Discord channel while the macro runs. Leave empty to disable everything.</div>
+        <div id="webhook-test-result" class="settings-desc" style="margin-top: 5px; min-height: 14px;"></div>
+        <input id="webhook-ping-id" class="webhook-input" type="text" spellcheck="false" autocomplete="off"
+               placeholder="Discord user ID to @ping (optional)" style="margin-top: 4px;" />
+        <div class="settings-desc" style="margin-top: 6px;">You get @pinged on critical alerts only (restart-loop guard, errors). To find your ID: Discord → Settings → Advanced → Developer Mode, then right-click your name → Copy User ID.</div>
+      </div>
+      <div id="webhook-rows"></div>
+    </div>
+
+    <div id="tab-advanced" class="settings-tabpane">
+      <div class="debug-warning">
+        ⚠️ Advanced settings. These boxes tell the app where on screen to read coins, XP and mana
+        (coordinates on a 2560×1440 baseline — scaled automatically for other resolutions).
+        Wrong values silently break reward tracking and the Discord embeds.
+        Only change them if OCR keeps misreading, and use <b>Test</b> with the game visible on screen.
+      </div>
+      <div id="debug-rows"></div>
+      <div class="settings-tools">
+        <button id="ocr-reset-btn" class="tool-btn" type="button">Reset to defaults</button>
+        <div class="settings-desc">Discards all region overrides and restores the built-in coordinates.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GUIDE MODAL (tabbed: Start / How it works / Discord / Fixes) -->
+<div id="guide-overlay" class="settings-overlay">
+  <div class="settings-card guide-card">
+    <div class="settings-header">
+      <span class="settings-title">Guide</span>
+      <span id="guide-close" class="settings-close-x" title="Close">&times;</span>
+    </div>
+    <div class="guide-tabs">
+      <button class="guide-tab active" type="button" data-gtab="start">Start</button>
+      <button class="guide-tab" type="button" data-gtab="how">How it works</button>
+      <button class="guide-tab" type="button" data-gtab="discord">Discord</button>
+      <button class="guide-tab" type="button" data-gtab="fixes">Fixes</button>
+    </div>
+    <div class="guide-body">
+
+      <div id="gtab-start" class="guide-tabpane active">
+        <div class="gsteps">
+          <div class="gstep"><span class="gstep-num">1</span><span class="gstep-text">
+            Install <b>AutoHotkey v1.1</b> — not v2, they're incompatible.
+            <span class="sub">The app detects it automatically and tells you at launch if it's missing.</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">2</span><span class="gstep-text">
+            Set Windows display <b>scale to 100%</b> and a supported resolution.
+            <span class="sub">Right-click desktop → Display settings. The macro clicks exact pixels, so both are checked before every run.</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">3</span><span class="gstep-text">
+            Pick your map &amp; mode, then hit <b>Play</b> (or press <span class="kbd">F1</span>).
+            <span class="sub">Roblox launches into a private server and the macro takes over — no setup inside the game needed.</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">4</span><span class="gstep-text">
+            Walk away. The macro places heroes, upgrades them, and loops rounds until you stop it.
+            <span class="sub">A floating overlay shows live Mana / Rounds / Coins / XP while it runs.</span>
+          </span></div>
+        </div>
+
+        <h4 class="guide-h">Hotkeys</h4>
+        <div class="kbd-grid">
+          <div class="kbd-item"><span class="kbd">F1</span><span>Play / Start</span></div>
+          <div class="kbd-item"><span class="kbd">F3</span><span>Stop</span></div>
+          <div class="kbd-item"><span class="kbd">F4</span><span>Show windows</span></div>
+        </div>
+
+        <h4 class="guide-h">Requirements</h4>
+        <div class="chip-row">
+          <span class="chip"><span class="cdot"></span>AutoHotkey v1.1</span>
+          <span class="chip"><span class="cdot"></span>100% display scale</span>
+          <span class="chip"><span class="cdot"></span>1920×1080</span>
+          <span class="chip"><span class="cdot"></span>2560×1440</span>
+          <span class="chip"><span class="cdot"></span>3840×2160</span>
+        </div>
+
+        <div class="callout warn"><span class="ico">⚠️</span><span>
+          While the macro runs, <b>don't move the mouse or type</b> — it's clicking real pixels on your screen.
+          Keep Roblox fullscreen on your main monitor. Press <b>F3</b> any time to take back control.
+        </span></div>
+      </div>
+
+      <div id="gtab-how" class="guide-tabpane">
+        <div class="flow">
+          <div class="flow-item">
+            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
+            <span><span class="flow-title">Launch &amp; lobby</span>
+            <span class="flow-desc">Opens a private server, waits for Roblox to go fullscreen, clicks through the lobby and readies up.</span></span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
+            <span><span class="flow-title">Gather mana</span>
+            <span class="flow-desc">Collects mana for ~30 seconds and lines up the camera before placing anything.</span></span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
+            <span><span class="flow-title">Place heroes</span>
+            <span class="flow-desc">Places the map's hero loadout, then verifies each hero card shows as placed — retrying only the ones that are missing.</span></span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
+            <span><span class="flow-title">Upgrade to MAX</span>
+            <span class="flow-desc">Upgrades each hero until its button reads MAX — checked by reading the actual button text off the screen, with a pixel-color fallback.</span></span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
+            <span><span class="flow-title">Finish &amp; loop</span>
+            <span class="flow-desc">Waits for the map-complete screen, reads your coin &amp; XP rewards off the results dialog, returns to the lobby, and starts the next round.</span></span>
+          </div>
+        </div>
+
+        <h4 class="guide-h">Safety nets</h4>
+        <div class="faq">
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🔁</span>Auto-recovery</div>
+            <div class="faq-a">If Roblox crashes, disconnects, or a step times out, the macro closes everything and relaunches from scratch on its own.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🛑</span>Restart-loop guard</div>
+            <div class="faq-a">5 restarts in a row without completing a round means something's actually broken — the macro stops itself instead of relaunching Roblox forever. Toggle in Settings → General.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="gtab-discord" class="guide-tabpane">
+        <div class="gsteps">
+          <div class="gstep"><span class="gstep-num">1</span><span class="gstep-text">
+            In Discord, open your server and pick a channel for updates.
+            <span class="sub">Channel settings (⚙) → Integrations → Webhooks → <b>New Webhook</b> → <b>Copy Webhook URL</b>.</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">2</span><span class="gstep-text">
+            Paste the URL in Settings → <b>Discord</b> tab and hit <b>Test</b>.
+            <span class="sub">A green test embed should appear in your channel within a second.</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">3</span><span class="gstep-text">
+            Pick which events get posted with the toggles below the URL.
+            <span class="sub">Start/stop, round results, restarts &amp; errors are on by default; placements and upgrades are off (they're chatty).</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">4</span><span class="gstep-text">
+            Optional: add your <b>Discord user ID</b> to get @pinged on critical alerts only.
+            <span class="sub">Discord → Settings → Advanced → Developer Mode on, then right-click your name → Copy User ID. Pings fire for the restart-loop guard and errors — never routine messages.</span>
+          </span></div>
+        </div>
+        <div class="callout tip"><span class="ico">💡</span><span>
+          Every round you get an embed with round + total coins/XP, mana, elapsed time and restart count —
+          so you can check on a long farm session from your phone without touching the PC.
+        </span></div>
+      </div>
+
+      <div id="gtab-fixes" class="guide-tabpane">
+        <div class="faq">
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🔍</span>Stuck on “Looking for play button”</div>
+            <div class="faq-a">Almost always display settings: Windows scale must be <b>100%</b> and resolution one of the three supported ones. Also make sure Roblox is fullscreen on your <b>main</b> monitor and nothing is covering it.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🪙</span>Coins or XP show 0 / wrong numbers</div>
+            <div class="faq-a">The reward reader scans fixed screen regions. If yours misread, open Settings → <b>Advanced</b>, use the per-region <b>Test</b> buttons with the results screen visible, nudge the boxes, or hit <b>Reset to defaults</b>.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🔁</span>It keeps restarting Roblox</div>
+            <div class="faq-a">One or two restarts per session is normal recovery (bad server, slow load). Constant restarts usually mean wrong resolution/scale — and after 5 in a row without a finished round, the loop guard stops the macro automatically.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🌐</span>A roblox.com browser tab is left open each launch</div>
+            <div class="faq-a">That's how Roblox launches. Turn on <b>Close leftover browser tab</b> in Settings → General and the macro closes it for you once the game is up.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">⌨️</span>Hotkeys do nothing</div>
+            <div class="faq-a">They're global, but another app may have grabbed F1/F3/F4 first. Close overlay tools (Xbox Game Bar, screen recorders) or use the in-app buttons.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🛑</span>How do I stop it?</div>
+            <div class="faq-a">Press <b>F3</b> anywhere, or click Stop in the app. With <b>Close Roblox on stop</b> enabled (Settings → General), Roblox exits too.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="guide-foot">Every map in the list runs on <b>Easy</b>. Medium &amp; Hard are in the works.</div>
+    </div>
+  </div>
+</div>
+
+<div id="content">
+  <div class="top-row">
+
+    <div class="panel" id="map-panel">
+      <span class="panel-title">Map Selector</span>
+      <div class="map-grid" id="map-grid"></div>
+    </div>
+
+    <div class="panel" id="mode-panel">
+      <span class="panel-title">Mode</span>
+      <div class="mode-list" id="mode-list"></div>
+    </div>
+
+  </div>
+
+  <div class="chars-section">
+    <span class="chars-title">Characters</span>
+    <div class="char-slots" id="char-slots"></div>
+  </div>
+</div>
+
+<div id="status-panel" class="status-panel info"></div>
+
+<div id="bottombar">
+  <div class="left-tools">
+    <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+    <button class="icon-btn" id="guide-btn" title="Guide" aria-label="Guide">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+    </button>
+  </div>
+  <div class="action-btns">
+    <button class="action-btn" id="btn-stop">Stop (F3)</button>
+    <button class="action-btn" id="btn-play">Play (F1)</button>
+  </div>
+</div>
+
+
+
+<script>
+  var state = {
+    map: 'Castle Town',
+    mode: 'Easy',
+    slot: null,
+    status: 'stopped'
+  };
+
+  var MAPS = [
+    'Castle Town',     'Radiant Reef',
+    'Oddport Academy', 'Corporate Chaos',
+    'Glowing Glacier'
+  ];
+
+  var MODES = ['Easy', 'Medium', 'Hard'];
+
+  // Character image mapping by map and difficulty. Every supported map runs
+  // the same Easy loadout: Kart Kid + Slime King.
+  var EASY_LOADOUT = ['./Images/Kart1.webp', './Images/Slimeking1.webp'];
+  var CHARACTER_IMAGES = {
+    'Castle Town':     { 'Easy': EASY_LOADOUT },
+    'Radiant Reef':    { 'Easy': EASY_LOADOUT },
+    'Oddport Academy': { 'Easy': EASY_LOADOUT },
+    'Corporate Chaos': { 'Easy': EASY_LOADOUT },
+    'Glowing Glacier': { 'Easy': EASY_LOADOUT }
+  };
+
+  function getCharacterImages() {
+    if (!state.map || !state.mode) {
+      return [];
+    }
+    var images = CHARACTER_IMAGES[state.map] && CHARACTER_IMAGES[state.map][state.mode];
+    return images || [];
+  }
+
+  function getCharacterNames() {
+    var images = getCharacterImages();
+    return images.map(function(path) {
+      var filename = path.split('/').pop().replace(/\.[^.]+$/, '');
+      return CHARACTER_NAME_MAP[filename] || filename.replace(/\d+$/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+    });
+  }
+
+  function renderMaps() {
+    var grid = document.getElementById('map-grid');
+    grid.innerHTML = '';
+    for (var i = 0; i < MAPS.length; i++) {
+      var map = MAPS[i];
+      var row = document.createElement('div');
+      row.className = 'cb-row';
+
+      var box = document.createElement('div');
+      box.className = 'cb-box' + (state.map === map ? ' checked' : '');
+
+      var tick = document.createElement('div');
+      tick.className = 'cb-tick';
+      box.appendChild(tick);
+
+      var label = document.createElement('span');
+      label.className = 'cb-label';
+      label.textContent = map;
+
+
+      row.appendChild(box);
+      row.appendChild(label);
+
+      (function(m) {
+        row.addEventListener('click', function() {
+          state.map = m;
+          renderMaps();
+          renderSlots();
+          updatePlayGate();
+        });
+      })(map);
+
+      grid.appendChild(row);
+    }
+  }
+
+  function renderModes() {
+    var list = document.getElementById('mode-list');
+    list.innerHTML = '';
+    for (var i = 0; i < MODES.length; i++) {
+      var mode = MODES[i];
+      var row = document.createElement('div');
+      row.className = 'cb-row';
+
+      var box = document.createElement('div');
+      box.className = 'cb-box' + (state.mode === mode ? ' checked' : '');
+
+      var tick = document.createElement('div');
+      tick.className = 'cb-tick';
+      box.appendChild(tick);
+
+      var label = document.createElement('span');
+      label.className = 'cb-label';
+      label.textContent = mode;
+
+      row.appendChild(box);
+      row.appendChild(label);
+
+      (function(m) {
+        row.addEventListener('click', function() {
+          state.mode = m;
+          renderModes();
+          renderSlots();
+          updatePlayGate();
+        });
+      })(mode);
+
+      list.appendChild(row);
+    }
+  }
+
+  var CHARACTER_NAME_MAP = {
+    'Kart1': 'Kart Kid',
+    'Slimeking1': 'Slime King',
+    'Oddport1': 'Oddport',
+    'Hayes1': 'Hayes'
+  };
+
+  function setStatusMessage(text, level) {
+    var panel = document.getElementById('status-panel');
+    if (!panel) return;
+    panel.textContent = text || '';
+    panel.className = 'status-panel ' + (level || 'info');
+  }
+
+  function renderSlots() {
+    var container = document.getElementById('char-slots');
+    container.innerHTML = '';
+    var images = getCharacterImages();
+    var names = images.map(function(path) {
+      var filename = path.split('/').pop().replace(/\.[^.]+$/, '');
+      return CHARACTER_NAME_MAP[filename] || filename.replace(/\d+$/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+    });
+    for (var i = 0; i < 5; i++) {
+      var hasCharacter = !!images[i];
+      var slot = document.createElement('div');
+      slot.className = 'char-slot' + (state.slot === i ? ' selected' : '') + (hasCharacter ? ' has-character' : '');
+      if (hasCharacter) {
+        slot.dataset.name = names[i] || 'Character';
+        var img = document.createElement('img');
+        img.src = images[i];
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '6px';
+        slot.appendChild(img);
+      } else {
+        slot.removeAttribute('data-name');
+        slot.removeAttribute('title');
+      }
+      
+      (function(idx) {
+        slot.addEventListener('click', function() {
+          state.slot = idx;
+          renderSlots();
+        });
+      })(i);
+      container.appendChild(slot);
+    }
+  }
+
+  function renderStatus() {
+    document.getElementById('btn-stop').className  = 'action-btn' + (state.status === 'stopped' ? ' active' : '');
+    document.getElementById('btn-play').className  = 'action-btn' + (state.status === 'playing' ? ' active' : '');
+  }
+
+  function setStatusMessage(message, level) {
+    var panel = document.getElementById('status-panel');
+    if (!panel) return;
+    panel.textContent = message || '';
+    panel.className = 'status-panel ' + (level || 'info');
+    panel.style.display = message ? 'block' : 'none';
+  }
+
+  function getSelectedResolution() {
+    return '2560x1440';
+  }
+
+  // Maps wired to the shared engine script (Easy only for now). Keep in
+  // sync with SUPPORTED_MAPS in main.js and the map table in the .ahk.
+  var SUPPORTED_MAPS = ['Castle Town', 'Radiant Reef', 'Oddport Academy', 'Corporate Chaos', 'Glowing Glacier'];
+
+  function isComboSupported() {
+    return SUPPORTED_MAPS.indexOf(state.map) !== -1 && state.mode === 'Easy';
+  }
+
+  // Show "not supported" as soon as an unsupported mode is picked, and dim
+  // the Play button while it's blocked (starting stays gated in
+  // runMacroAction, which also covers the F1 hotkey).
+  function updatePlayGate() {
+    var blocked = !isComboSupported();
+    var btn = document.getElementById('btn-play');
+    btn.style.opacity = blocked ? '0.4' : '';
+    btn.title = blocked ? 'Not supported' : '';
+    if (blocked) {
+      setStatusMessage('⛔ ' + state.mode + ' mode is not supported', 'warning');
+    } else if (state.status !== 'playing') {
+      setStatusMessage('', 'info');
+    }
+  }
+
+  function runMacroAction(action) {
+    if (action === 'start' && !isComboSupported()) {
+      setStatusMessage('⛔ ' + state.mode + ' mode is not supported', 'warning');
+      state.status = 'stopped';
+      renderStatus();
+      return;
+    }
+
+    if (!window.electronAPI || !state.map || !state.mode) return;
+
+    var res = getSelectedResolution();
+    window.electronAPI.runScript(action, state.map, state.mode, res);
+  }
+
+  document.getElementById('btn-stop').addEventListener('click', function()  {
+    state.status = 'stopped';
+    renderStatus();
+    runMacroAction('stop');
+  });
+  document.getElementById('btn-play').addEventListener('click', function()  {
+    state.status = 'playing';
+    renderStatus();
+    runMacroAction('start');
+  });
+
+  if (window.electronAPI) {
+    window.electronAPI.onStatus(function(text) {
+      if (!text) return;
+      console.log('Status update received (main UI ignored):', text);
+    });
+
+    window.electronAPI.onHotkey(function(action) {
+      if (action === 'play') {
+        state.status = 'playing';
+        renderStatus();
+        runMacroAction('start');
+      } else if (action === 'stop') {
+        state.status = 'stopped';
+        renderStatus();
+        runMacroAction('stop');
+      }
+    });
+  } else {
+    setStatusMessage('Electron API unavailable', 'error');
+    console.warn('electronAPI is not available');
+  }
+
+  // ---- Settings ----
+  var SETTINGS_META = [
+    { key: 'closeRobloxOnStop', label: 'Close Roblox when macro stops',
+      desc: 'Automatically close the Roblox window when you stop or finish the macro.' },
+    { key: 'showStatusOverlay', label: 'Show floating status overlay',
+      desc: 'Show the small always-visible status window while the macro runs.' },
+    { key: 'overlayAlwaysOnTop', label: 'Keep overlay always on top',
+      desc: 'Pin the status overlay above other windows (applies on next run).' },
+    { key: 'closeBrowserTab', label: 'Close leftover browser tab',
+      desc: 'After Roblox launches, close the roblox.com tab that the launcher left open in your browser.' },
+    { key: 'restartLoopGuard', label: 'Restart-loop guard',
+      desc: 'Stop the macro after 5 straight restarts without completing a round (and ping you on Discord, if set below).' }
+  ];
+  // Per-event webhook toggles (mirrors SETTINGS_DEFAULTS.webhookEvents in main.js).
+  var WEBHOOK_EVENTS_META = [
+    { key: 'started', label: 'Macro started',
+      desc: 'A message when the macro launches.' },
+    { key: 'roundComplete', label: 'Round complete',
+      desc: 'The results embed after each round: coins, XP, mana, totals.' },
+    { key: 'placements', label: 'Hero placements',
+      desc: 'A message when each hero is placed on the map.' },
+    { key: 'upgrades', label: 'Hero upgrades',
+      desc: 'A message when a hero reaches max upgrades.' },
+    { key: 'restarts', label: 'Restarts & errors',
+      desc: 'Details when the macro restarts Roblox to recover (which timeout, round, elapsed) and any error output.' },
+    { key: 'stopped', label: 'Macro stopped',
+      desc: 'The session summary (rounds, coins, XP) when the macro stops.' }
+  ];
+  // Hidden debug calibrator: one row per OCR region (2560x1440 baseline coords).
+  var OCR_REGION_META = [
+    { key: 'coins',   label: 'Coins — "Game Complete" dialog' },
+    { key: 'exp',     label: 'XP — "Game Complete" dialog' },
+    { key: 'rewards', label: 'Reward strip — backup, whole dialog row' },
+    { key: 'mana',    label: 'Live mana — bottom-left HUD' }
+  ];
+  var OCR_DEFAULTS = null; // filled via getOcrDefaults IPC
+  var settingsState = {
+    closeRobloxOnStop: false, showStatusOverlay: true, overlayAlwaysOnTop: true,
+    closeBrowserTab: false, restartLoopGuard: true,
+    discordWebhookUrl: '', discordPingUserId: '',
+    webhookEvents: { started: true, roundComplete: true, placements: false, upgrades: false, restarts: true, stopped: true },
+    ocrRegions: null
+  };
+
+  function renderSettings() {
+    var rows = document.getElementById('settings-rows');
+    if (!rows) return;
+    rows.innerHTML = '';
+    SETTINGS_META.forEach(function(meta) {
+      var row = document.createElement('div');
+      row.className = 'settings-row';
+
+      var text = document.createElement('div');
+      text.className = 'settings-row-text';
+      var label = document.createElement('span');
+      label.className = 'settings-label';
+      label.textContent = meta.label;
+      var desc = document.createElement('span');
+      desc.className = 'settings-desc';
+      desc.textContent = meta.desc;
+      text.appendChild(label);
+      text.appendChild(desc);
+
+      var toggle = document.createElement('div');
+      toggle.className = 'toggle' + (settingsState[meta.key] ? ' on' : '');
+      var knob = document.createElement('div');
+      knob.className = 'toggle-knob';
+      toggle.appendChild(knob);
+      toggle.addEventListener('click', function() {
+        settingsState[meta.key] = !settingsState[meta.key];
+        toggle.className = 'toggle' + (settingsState[meta.key] ? ' on' : '');
+        if (window.electronAPI && window.electronAPI.saveSettings) {
+          window.electronAPI.saveSettings(settingsState);
+        }
+      });
+
+      row.appendChild(text);
+      row.appendChild(toggle);
+      rows.appendChild(row);
+    });
+  }
+
+  // Webhook settings modal: one toggle row per event type.
+  function renderWebhookSettings() {
+    var rows = document.getElementById('webhook-rows');
+    if (!rows) return;
+    rows.innerHTML = '';
+    if (!settingsState.webhookEvents) settingsState.webhookEvents = {};
+    WEBHOOK_EVENTS_META.forEach(function(meta) {
+      var row = document.createElement('div');
+      row.className = 'settings-row';
+
+      var text = document.createElement('div');
+      text.className = 'settings-row-text';
+      var label = document.createElement('span');
+      label.className = 'settings-label';
+      label.textContent = meta.label;
+      var desc = document.createElement('span');
+      desc.className = 'settings-desc';
+      desc.textContent = meta.desc;
+      text.appendChild(label);
+      text.appendChild(desc);
+
+      var on = settingsState.webhookEvents[meta.key] !== false;
+      var toggle = document.createElement('div');
+      toggle.className = 'toggle' + (on ? ' on' : '');
+      var knob = document.createElement('div');
+      knob.className = 'toggle-knob';
+      toggle.appendChild(knob);
+      toggle.addEventListener('click', function() {
+        var next = settingsState.webhookEvents[meta.key] === false;
+        settingsState.webhookEvents[meta.key] = next;
+        toggle.className = 'toggle' + (next ? ' on' : '');
+        if (window.electronAPI && window.electronAPI.saveSettings) {
+          window.electronAPI.saveSettings(settingsState);
+        }
+      });
+
+      row.appendChild(text);
+      row.appendChild(toggle);
+      rows.appendChild(row);
+    });
+  }
+
+  // Debug modal: X/Y/W/H inputs per OCR region + a live "Test" read per row.
+  function ocrRegionValue(key) {
+    var o = settingsState.ocrRegions && settingsState.ocrRegions[key];
+    if (o && isFinite(o.x) && isFinite(o.y) && isFinite(o.w) && isFinite(o.h)) return o;
+    return (OCR_DEFAULTS && OCR_DEFAULTS[key]) || { x: 0, y: 0, w: 0, h: 0 };
+  }
+  function readOcrInputs(key) {
+    var region = {};
+    ['x', 'y', 'w', 'h'].forEach(function(c) {
+      var el = document.getElementById('ocr-' + key + '-' + c);
+      region[c] = el ? parseInt(el.value, 10) : NaN;
+    });
+    return region;
+  }
+  function saveOcrRegions() {
+    var all = {};
+    OCR_REGION_META.forEach(function(meta) { all[meta.key] = readOcrInputs(meta.key); });
+    settingsState.ocrRegions = all;
+    if (window.electronAPI && window.electronAPI.saveSettings) {
+      window.electronAPI.saveSettings(settingsState);
+    }
+  }
+  function renderDebugSettings() {
+    var rows = document.getElementById('debug-rows');
+    if (!rows) return;
+    rows.innerHTML = '';
+    OCR_REGION_META.forEach(function(meta) {
+      var row = document.createElement('div');
+      row.className = 'debug-region';
+
+      var label = document.createElement('div');
+      label.className = 'settings-label';
+      label.textContent = meta.label;
+      row.appendChild(label);
+
+      var inputs = document.createElement('div');
+      inputs.className = 'debug-inputs';
+      var region = ocrRegionValue(meta.key);
+      ['x', 'y', 'w', 'h'].forEach(function(c) {
+        var cl = document.createElement('span');
+        cl.className = 'coord-label';
+        cl.textContent = c.toUpperCase();
+        var inp = document.createElement('input');
+        inp.type = 'number';
+        inp.id = 'ocr-' + meta.key + '-' + c;
+        inp.className = 'webhook-input ocr-num';
+        inp.value = region[c];
+        inp.addEventListener('change', saveOcrRegions);
+        inputs.appendChild(cl);
+        inputs.appendChild(inp);
+      });
+
+      var testBtn = document.createElement('button');
+      testBtn.type = 'button';
+      testBtn.className = 'tool-btn debug-test-btn';
+      testBtn.textContent = 'Test';
+      testBtn.title = 'OCR this region right now (have the game visible on screen)';
+      inputs.appendChild(testBtn);
+      row.appendChild(inputs);
+
+      var result = document.createElement('div');
+      result.className = 'settings-desc debug-result';
+      row.appendChild(result);
+
+      testBtn.addEventListener('click', function() {
+        if (!window.electronAPI || !window.electronAPI.testOcrRegion) return;
+        result.textContent = 'Reading…';
+        window.electronAPI.testOcrRegion(readOcrInputs(meta.key)).then(function(r) {
+          if (r && r.ok) {
+            result.textContent = r.text ? ('Read: "' + r.text + '"') : 'Read: (nothing recognized)';
+          } else {
+            result.textContent = 'Failed: ' + ((r && r.error) || 'unknown error');
+          }
+        }).catch(function() { result.textContent = 'Failed: IPC error'; });
+      });
+
+      rows.appendChild(row);
+    });
+  }
+
+  function refreshLifetimeStats() {
+    var el = document.getElementById('lifetime-stats');
+    if (!el || !window.electronAPI || !window.electronAPI.getLifetimeStats) return;
+    window.electronAPI.getLifetimeStats().then(function(t) {
+      if (!t) return;
+      var h = Math.floor(t.timeSec / 3600);
+      var m = Math.floor((t.timeSec % 3600) / 60);
+      el.textContent = t.sessions
+        ? ('Lifetime: ' + t.rounds + ' rounds · ' + t.coins + ' coins · ' + t.xp + ' XP · ' + h + 'h ' + m + 'm across ' + t.sessions + ' sessions')
+        : 'Lifetime stats will appear here after your first run.';
+    }).catch(function() {});
+  }
+
+  function openSettings()  { document.getElementById('settings-overlay').classList.add('open'); refreshLifetimeStats(); }
+  function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
+
+  // Tabbed settings: General / Discord / Advanced panes inside one modal.
+  function selectSettingsTab(name) {
+    document.querySelectorAll('.settings-tab').forEach(function(t) {
+      t.className = 'settings-tab' + (t.dataset.tab === name ? ' active' : '');
+    });
+    document.querySelectorAll('.settings-tabpane').forEach(function(p) {
+      p.className = 'settings-tabpane' + (p.id === 'tab-' + name ? ' active' : '');
+    });
+    // Re-render the calibrator on entry so inputs reflect saved values/defaults.
+    if (name === 'advanced') renderDebugSettings();
+  }
+  // Guide tabs mirror the settings tabs but use their own classes so the two
+  // modals' tab logic can never toggle each other's panes.
+  function selectGuideTab(name) {
+    document.querySelectorAll('.guide-tab').forEach(function(t) {
+      t.className = 'guide-tab' + (t.dataset.gtab === name ? ' active' : '');
+    });
+    document.querySelectorAll('.guide-tabpane').forEach(function(p) {
+      p.className = 'guide-tabpane' + (p.id === 'gtab-' + name ? ' active' : '');
+    });
+    var body = document.querySelector('.guide-body');
+    if (body) body.scrollTop = 0;
+  }
+  function openGuide()     { selectGuideTab('start'); document.getElementById('guide-overlay').classList.add('open'); }
+  function closeGuide()    { document.getElementById('guide-overlay').classList.remove('open'); }
+
+  (function initSettings() {
+    var btn = document.getElementById('settings-btn');
+    var overlay = document.getElementById('settings-overlay');
+    var closeX = document.getElementById('settings-close');
+    if (btn) btn.addEventListener('click', openSettings);
+    if (closeX) closeX.addEventListener('click', closeSettings);
+
+    // Guide modal wiring.
+    var guideBtn = document.getElementById('guide-btn');
+    var guideOverlay = document.getElementById('guide-overlay');
+    var guideCloseX = document.getElementById('guide-close');
+    if (guideBtn) guideBtn.addEventListener('click', openGuide);
+    if (guideCloseX) guideCloseX.addEventListener('click', closeGuide);
+    document.querySelectorAll('.guide-tab').forEach(function(t) {
+      t.addEventListener('click', function() { selectGuideTab(t.dataset.gtab); });
+    });
+    if (guideOverlay) guideOverlay.addEventListener('click', function(e) {
+      if (e.target === guideOverlay) closeGuide();
+    });
+
+    // Settings tab bar.
+    document.querySelectorAll('.settings-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() { selectSettingsTab(tab.dataset.tab); });
+    });
+
+    // "Test" button — posts a sample message to the URL currently in the box.
+    var whTestBtn = document.getElementById('webhook-test-btn');
+    var whTestResult = document.getElementById('webhook-test-result');
+    if (whTestBtn) whTestBtn.addEventListener('click', function() {
+      var url = document.getElementById('webhook-url').value.trim();
+      if (!whTestResult) return;
+      if (!url) { whTestResult.textContent = 'Enter a webhook URL first.'; return; }
+      if (!window.electronAPI || !window.electronAPI.testWebhook) return;
+      whTestResult.textContent = 'Sending test message…';
+      window.electronAPI.testWebhook(url).then(function(r) {
+        whTestResult.textContent = (r && r.ok)
+          ? '✓ Sent — check your Discord channel.'
+          : '✗ Failed: ' + ((r && (r.error || ('Discord returned HTTP ' + r.status))) || 'unknown error');
+      }).catch(function() { whTestResult.textContent = '✗ Failed: IPC error'; });
+    });
+
+    // Advanced tab: OCR calibration reset.
+    var ocrResetBtn = document.getElementById('ocr-reset-btn');
+    if (ocrResetBtn) ocrResetBtn.addEventListener('click', function() {
+      settingsState.ocrRegions = null;
+      if (window.electronAPI && window.electronAPI.saveSettings) {
+        window.electronAPI.saveSettings(settingsState);
+      }
+      renderDebugSettings();
+    });
+    if (window.electronAPI && window.electronAPI.getOcrDefaults) {
+      window.electronAPI.getOcrDefaults().then(function(d) {
+        if (d) OCR_DEFAULTS = d;
+      }).catch(function() {});
+    }
+
+    // Discord webhook URL — saved on change (blur/Enter).
+    var whInput = document.getElementById('webhook-url');
+    if (whInput) whInput.addEventListener('change', function() {
+      settingsState.discordWebhookUrl = whInput.value.trim();
+      whInput.value = settingsState.discordWebhookUrl;
+      if (window.electronAPI && window.electronAPI.saveSettings) {
+        window.electronAPI.saveSettings(settingsState);
+      }
+    });
+
+    // Ping user ID — digits only, saved on change.
+    var pingInput = document.getElementById('webhook-ping-id');
+    if (pingInput) pingInput.addEventListener('change', function() {
+      settingsState.discordPingUserId = pingInput.value.replace(/\D/g, '');
+      pingInput.value = settingsState.discordPingUserId;
+      if (window.electronAPI && window.electronAPI.saveSettings) {
+        window.electronAPI.saveSettings(settingsState);
+      }
+    });
+    if (overlay) overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeSettings();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { closeSettings(); closeGuide(); }
+    });
+
+    if (window.electronAPI && window.electronAPI.getSettings) {
+      window.electronAPI.getSettings().then(function(s) {
+        if (s) {
+          var localEvents = settingsState.webhookEvents;
+          settingsState = Object.assign(settingsState, s);
+          settingsState.webhookEvents = Object.assign({}, localEvents, s.webhookEvents || {});
+        }
+        renderSettings();
+        renderWebhookSettings();
+        if (whInput) whInput.value = settingsState.discordWebhookUrl || '';
+        if (pingInput) pingInput.value = settingsState.discordPingUserId || '';
+      }).catch(function() { renderSettings(); renderWebhookSettings(); });
+    } else {
+      renderSettings();
+      renderWebhookSettings();
+    }
+  })();
+
+  renderMaps();
+  console.log('renderMaps completed');
+  renderModes();
+  console.log('renderModes completed');
+  renderSlots();
+  console.log('renderSlots completed');
+  renderStatus();
+  console.log('renderStatus completed');
+  updatePlayGate();
+  
+  // Debug: Log to console
+  console.log('Page initialized:', {
+    map: state.map,
+    mode: state.mode,
+    mapCount: MAPS.length,
+    modeCount: MODES.length
+  });
+
+  // Update debug element
+  var debugEl = document.getElementById('debug-test');
+  if (debugEl) {
+    debugEl.textContent = 'App loaded: ' + state.map + ' / ' + state.mode;
+  }
+
+  // Intro animation — reveal, glow pulse and accent line are CSS-driven.
+  // Here we just trigger the fade-out and remove the overlay afterward.
+  (function(){
+    const intro = document.getElementById('intro');
+    setTimeout(()=>{
+      intro.classList.add('hide');
+      setTimeout(()=>{ intro.style.display = 'none'; }, 750);
+    }, 3200);
+  })();
+
+</script>
+</body>
+</html>

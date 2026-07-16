@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #141720;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      width: 320px;
+      height: 176px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 32px;
+      padding: 0 10px;
+      background: #141720;
+      border-bottom: 1px solid #2a2f3e;
+      -webkit-app-region: drag;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    #status-container {
+      flex: 1;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse 2s infinite;
+    }
+    .status-indicator.inactive {
+      background: #6b7280;
+      animation: none;
+    }
+    .status-indicator.error {
+      background: #ef4444;
+      animation: pulse-error 0.5s infinite;
+    }
+    #status-text {
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      max-width: 280px;
+      word-wrap: break-word;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    @keyframes pulse-error {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .close-btn {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.25);
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      background: #d9534f;
+      padding: 0;
+      -webkit-app-region: no-drag;
+    }
+    .close-btn:hover { filter: brightness(1.1); }
+
+    #stats-strip {
+      display: flex;
+      border-top: 1px solid #2a2f3e;
+      background: #11141c;
+    }
+    .stat {
+      flex: 1;
+      padding: 8px 2px 9px;
+      text-align: center;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .stat + .stat { border-left: 1px solid #2a2f3e; }
+    .stat-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: #eaf0ff;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .stat-lbl {
+      margin-top: 2px;
+      font-size: 8.5px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #7c85a0;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="titlebar">
+    <span>Macro Status</span>
+    <button class="close-btn" onclick="window.close()" title="Close"></button>
+  </div>
+  <div id="status-container">
+    <span class="status-indicator"></span>
+    <div id="status-text">Starting...</div>
+  </div>
+  <div id="stats-strip">
+    <div class="stat"><div class="stat-val" id="stat-mana">—</div><div class="stat-lbl">Mana</div></div>
+    <div class="stat"><div class="stat-val" id="stat-rounds">0</div><div class="stat-lbl">Rounds</div></div>
+    <div class="stat"><div class="stat-val" id="stat-coins">0</div><div class="stat-lbl">Coins</div></div>
+    <div class="stat"><div class="stat-val" id="stat-xp">0</div><div class="stat-lbl">XP</div></div>
+  </div>
+  <script>
+    const indicator = document.querySelector('.status-indicator');
+    const statusText = document.getElementById('status-text');
+    
+    // Initial status
+    statusText.textContent = 'Initializing...';
+    console.log('Status popup initialized');
+    
+    try {
+      window.electronAPI.onStatus((text) => {
+        console.log('Status update received:', text);  // Debug logging
+        statusText.textContent = text;
+        const lower = text.toLowerCase();
+        
+        indicator.className = 'status-indicator';
+        if (lower.includes('error')) {
+          indicator.classList.add('error');
+        } else if (lower.includes('idle') || lower.includes('stopped') || lower.includes('complete')) {
+          indicator.classList.add('inactive');
+        }
+      });
+      console.log('Status listener attached successfully');
+
+      window.electronAPI.onStats(function(s) {
+        if (!s) return;
+        document.getElementById('stat-mana').textContent = (s.mana != null) ? s.mana : '—';
+        document.getElementById('stat-rounds').textContent = s.rounds;
+        document.getElementById('stat-coins').textContent = (s.coins != null) ? s.coins : 0;
+        document.getElementById('stat-xp').textContent = (s.xp != null) ? s.xp : 0;
+      });
+    } catch (error) {
+      console.error('Failed to attach status listener:', error);
+      statusText.textContent = 'Error: Status listener failed';
+      indicator.classList.add('error');
+    }
+    
+    // Fallback: check if API is available
+    if (!window.electronAPI) {
+      console.error('electronAPI not available');
+      statusText.textContent = 'Error: No API connection';
+      indicator.classList.add('error');
+    } else {
+      console.log('electronAPI is available');
+    }
+  </script>
+</body>
+</html>

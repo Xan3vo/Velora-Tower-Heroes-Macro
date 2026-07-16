@@ -1,0 +1,17 @@
+# Dependencies / build output
+node_modules/
+dist/
+
+# Runtime files the macro writes next to itself
+macro_running.txt
+status.txt
+stop.txt
+towerheroes-stats.txt
+*.log
+
+# Local tooling
+.claude/
+
+# OS junk
+Thumbs.db
+desktop.ini
