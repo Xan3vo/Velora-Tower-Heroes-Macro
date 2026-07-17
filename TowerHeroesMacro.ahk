@@ -780,7 +780,16 @@ Loop, 3 {
     useDeeplink := (launchMethod = "auto" && deeplinkFails < 2)
     if (useDeeplink) {
         UpdateStatus("Launching Roblox (deep link)")
-        Run, roblox://experiences/start?placeId=4646477729&linkCode=30153874208011614870924132818489
+        ; UseErrorLevel: if the roblox:// protocol isn't registered on this
+        ; machine, a plain Run throws a blocking error dialog and kills the
+        ; thread — the fallback would never fire. Swallow it, count the
+        ; attempt as failed immediately (no 20s wait), and move on.
+        Run, roblox://experiences/start?placeId=4646477729&linkCode=30153874208011614870924132818489, , UseErrorLevel
+        if (ErrorLevel) {
+            deeplinkFails += 1
+            UpdateStatus(deeplinkFails >= 2 ? "Deep link unavailable - switching to browser launch" : "Deep link launch failed - retrying")
+            Continue
+        }
     } else {
         UpdateStatus("Launching Roblox (browser)")
         Run, https://www.roblox.com/games/4646477729/Tower-Heroes?privateServerLinkCode=30153874208011614870924132818489
