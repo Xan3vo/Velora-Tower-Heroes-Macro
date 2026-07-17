@@ -444,6 +444,19 @@
     }
     .webhook-input:focus { border-color: #3a4670; }
     .webhook-input::placeholder { color: #5b647c; }
+    .settings-select {
+      flex: none;
+      padding: 6px 8px;
+      border-radius: 7px;
+      border: 1px solid #2a3350;
+      background: #1c2233;
+      color: #dfe6f7;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+    .settings-select:focus { border-color: #3a4670; }
 
     @keyframes vspin   { to { transform: rotate(360deg);  } }
     @keyframes vspin-r { to { transform: rotate(-360deg); } }  @keyframes ring-spin   { to { transform: rotate(360deg);  } }
@@ -1312,7 +1325,7 @@
     { key: 'overlayAlwaysOnTop', label: 'Keep overlay always on top',
       desc: 'Pin the status overlay above other windows (applies on next run).' },
     { key: 'closeBrowserTab', label: 'Close leftover browser tab',
-      desc: 'After Roblox launches, close the roblox.com tab that the launcher left open in your browser.' },
+      desc: 'After a browser launch, close the roblox.com tab left open in your browser. Only applies when Roblox is launched through the browser.' },
     { key: 'restartLoopGuard', label: 'Restart-loop guard',
       desc: 'Stop the macro after 5 straight restarts without completing a round (and ping you on Discord, if set below).' }
   ];
@@ -1341,7 +1354,7 @@
   var OCR_DEFAULTS = null; // filled via getOcrDefaults IPC
   var settingsState = {
     closeRobloxOnStop: false, showStatusOverlay: true, overlayAlwaysOnTop: true,
-    closeBrowserTab: false, restartLoopGuard: true,
+    closeBrowserTab: false, restartLoopGuard: true, launchMethod: 'auto',
     discordWebhookUrl: '', discordPingUserId: '',
     webhookEvents: { started: true, roundComplete: true, placements: false, upgrades: false, restarts: true, stopped: true },
     ocrRegions: null
@@ -1383,6 +1396,41 @@
       row.appendChild(toggle);
       rows.appendChild(row);
     });
+
+    // Roblox launch method — a dropdown, not a toggle (mirrors
+    // SETTINGS_DEFAULTS.launchMethod in main.js).
+    var lmRow = document.createElement('div');
+    lmRow.className = 'settings-row';
+    var lmText = document.createElement('div');
+    lmText.className = 'settings-row-text';
+    var lmLabel = document.createElement('span');
+    lmLabel.className = 'settings-label';
+    lmLabel.textContent = 'Roblox launch method';
+    var lmDesc = document.createElement('span');
+    lmDesc.className = 'settings-desc';
+    lmDesc.textContent = 'Deep link starts Roblox directly with no browser tab, and switches to the browser after 2 failed attempts. Browser always launches through roblox.com.';
+    lmText.appendChild(lmLabel);
+    lmText.appendChild(lmDesc);
+
+    var lmSelect = document.createElement('select');
+    lmSelect.className = 'settings-select';
+    [['auto', 'Deep link + fallback'], ['browser', 'Browser']].forEach(function(opt) {
+      var o = document.createElement('option');
+      o.value = opt[0];
+      o.textContent = opt[1];
+      lmSelect.appendChild(o);
+    });
+    lmSelect.value = settingsState.launchMethod === 'browser' ? 'browser' : 'auto';
+    lmSelect.addEventListener('change', function() {
+      settingsState.launchMethod = lmSelect.value;
+      if (window.electronAPI && window.electronAPI.saveSettings) {
+        window.electronAPI.saveSettings(settingsState);
+      }
+    });
+
+    lmRow.appendChild(lmText);
+    lmRow.appendChild(lmSelect);
+    rows.appendChild(lmRow);
   }
 
   // Webhook settings modal: one toggle row per event type.

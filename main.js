@@ -320,6 +320,10 @@ const SETTINGS_DEFAULTS = {
   showStatusOverlay: true,    // show the small floating status window
   overlayAlwaysOnTop: true,   // keep that overlay pinned above other windows
   closeBrowserTab: false,     // close the leftover roblox.com browser tab after launch (AHK-side)
+  // How the macro launches Roblox: 'auto' = roblox:// deep link (no browser
+  // tab), falling back to the browser URL after 2 failed deep-link attempts;
+  // 'browser' = always launch via roblox.com in the default browser.
+  launchMethod: 'auto',
   restartLoopGuard: true,     // auto-stop after 5 straight restarts with no completed round
   discordWebhookUrl: '',      // Discord webhook for run updates ('' = disabled)
   discordPingUserId: '',      // Discord user ID to @ping on critical alerts ('' = no ping)
@@ -614,7 +618,7 @@ const SUPPORTED_RESOLUTIONS = [
 
 // Check the primary display's real resolution and scaling against what the
 // macro supports. Returns { ok, physW, physH, scalePct, title, detail }.
-// Mirrors the checks inside CastleTown_Easy.ahk, but runs up front so the user
+// Mirrors the checks inside TowerHeroesMacro.ahk, but runs up front so the user
 // is told before Roblox launches — not after a confusing restart loop.
 function checkDisplaySupport() {
   const { screen } = require('electron');
@@ -763,11 +767,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   // One shared engine script: the in-game sequence (heroes, upgrades,
   // completion) is identical across these maps — only the lobby map-pick
   // step differs, and the script branches on the map name it gets as arg 2.
-  const SUPPORTED_MAPS = ['Castle Town', 'Radiant Reef', 'Oddport Academy', 'Corporate Chaos', 'Glowing Glacier'];
   let scriptPath = path.join(__dirname, 'TowerHeroesMacro.ahk');
-  if (SUPPORTED_MAPS.includes(map) && difficulty === 'Easy') {
-    scriptPath = path.join(__dirname, 'CastleTown_Easy.ahk');
-  }
 
   // For packaged app, copy script to temp directory
   const tempDir = require('os').tmpdir();
@@ -1013,8 +1013,11 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   console.log('Status polling started for:', statusFile);
 
   // Arg 6: "1" = close the leftover roblox.com browser tab after launch.
-  const closeTabFlag = loadSettings().closeBrowserTab ? '1' : '0';
-  const args = [scriptPath, action, map, difficulty, resParam, statusFile, closeTabFlag];
+  // Arg 7: launch method — 'auto' (deep link + browser fallback) or 'browser'.
+  const launchSettings = loadSettings();
+  const closeTabFlag = launchSettings.closeBrowserTab ? '1' : '0';
+  const launchMethod = launchSettings.launchMethod === 'browser' ? 'browser' : 'auto';
+  const args = [scriptPath, action, map, difficulty, resParam, statusFile, closeTabFlag, launchMethod];
   console.log('Spawning AHK with args:', JSON.stringify(args));
   console.log('Total args count:', args.length);
   

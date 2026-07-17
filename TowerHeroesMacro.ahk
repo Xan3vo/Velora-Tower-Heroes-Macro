@@ -48,6 +48,17 @@ if (argsCount >= 2 && A_Args[2] != "")
 ; Arg 6 ("1"/"0"): close the leftover roblox.com browser tab after launch.
 closeBrowserTab := (argsCount >= 6 && A_Args[6] = "1")
 
+; Arg 7: launch method — "auto" (roblox:// deep link, no browser tab; falls
+; back to the browser URL after 2 failed deep-link attempts) or "browser"
+; (always launch via roblox.com in the default browser).
+launchMethod := "auto"
+if (argsCount >= 7 && A_Args[7] = "browser")
+    launchMethod := "browser"
+; Failed deep-link launches this run. Persists across FullRestarts on purpose:
+; once the deep link has failed twice, every later restart goes straight to
+; the browser instead of burning 40s rediscovering the same failure.
+deeplinkFails := 0
+
 ; ============================================================
 ;  SCALE FACTOR
 ; ============================================================
@@ -760,21 +771,42 @@ FileDelete, %macroRunningFile%
 FileAppend, running, %macroRunningFile%
 
 WriteStats()
-UpdateStatus("Launching Roblox")
-Run, https://www.roblox.com/games/4646477729/Tower-Heroes?privateServerLinkCode=30153874208011614870924132818489
-SleepWithStop(15000)
+; Up to 3 attempts in auto mode: deep link, deep link, then the browser URL.
+; In browser mode the first (browser) attempt failing is fatal, as before.
+usedBrowserLaunch := false
+robloxID := 0
+Loop, 3 {
+    CheckForStop()
+    useDeeplink := (launchMethod = "auto" && deeplinkFails < 2)
+    if (useDeeplink) {
+        UpdateStatus("Launching Roblox (deep link)")
+        Run, roblox://experiences/start?placeId=4646477729&linkCode=30153874208011614870924132818489
+    } else {
+        UpdateStatus("Launching Roblox (browser)")
+        Run, https://www.roblox.com/games/4646477729/Tower-Heroes?privateServerLinkCode=30153874208011614870924132818489
+        usedBrowserLaunch := true
+    }
+    SleepWithStop(15000)
 
-WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
-if (!robloxID) {
-    UpdateStatus("Waiting for Roblox to start")
-    Sleep, 5000
     WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
+    if (!robloxID) {
+        UpdateStatus("Waiting for Roblox to start")
+        Sleep, 5000
+        WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
+    }
+    if (robloxID)
+        Break
+    if (!useDeeplink)
+        Break
+    deeplinkFails += 1
+    UpdateStatus(deeplinkFails >= 2 ? "Deep link failed twice - switching to browser launch" : "Deep link launch failed - retrying")
 }
 
 if (robloxID) {
     UpdateStatus("Roblox launcher detected")
-    ; The client is up — the launcher tab in the browser is now dead weight.
-    CloseLeftoverBrowserTab()
+    ; Only a browser launch leaves a tab behind — the deep link never opens one.
+    if (usedBrowserLaunch)
+        CloseLeftoverBrowserTab()
     WinActivate, ahk_id %robloxID%
     Sleep, 1000
     Sleep, 5000
