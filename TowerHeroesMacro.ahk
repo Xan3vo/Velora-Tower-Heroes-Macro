@@ -242,31 +242,24 @@ FindRobloxPlayerExe() {
 ;  ROBLOX WINDOW HELPERS
 ; ============================================================
 
-; True while Roblox is still up — either the game client window OR a browser
-; window still titled "Roblox". Used to detect a disconnect / crash so the run
-; can auto-rejoin instead of clicking into a dead window forever.
+; True while the Roblox game client is still up. Used to detect a disconnect /
+; crash so the run can auto-rejoin instead of clicking into a dead window
+; forever. Only the client exe counts: a browser tab titled "Roblox" (the old
+; secondary check) is NOT the game — counting it masked real disconnects
+; whenever the user had roblox.com open, and every caller runs in-game where
+; the client must exist.
 RobloxAlive() {
-    if WinExist("ahk_exe RobloxPlayerBeta.exe")
-        return true
-    WinGet, ids, List, ahk_class Chrome_WidgetWin_1
-    Loop, %ids% {
-        id := ids%A_Index%
-        WinGetTitle, t, ahk_id %id%
-        if (InStr(t, "Roblox"))
-            return true
-    }
-    return false
+    return WinExist("ahk_exe RobloxPlayerBeta.exe") ? true : false
 }
 
+; Close only the game client. This used to also WinClose any Chrome_WidgetWin_1
+; window titled "Roblox" — but that class is Chrome/Edge/Brave, so it closed
+; the user's ENTIRE browser window if their active tab mentioned Roblox
+; (tester-reported on a deep-link launch, where no leftover tab even exists).
+; Leftover browser-tab cleanup is CloseLeftoverBrowserTab's job, gated to
+; browser launches and scoped to one Ctrl+W.
 CloseRobloxWindows() {
     WinClose, ahk_exe RobloxPlayerBeta.exe
-    WinGet, windows, List, ahk_class Chrome_WidgetWin_1
-    Loop, %windows% {
-        id := windows%A_Index%
-        WinGetTitle, title, ahk_id %id%
-        if (InStr(title, "Roblox"))
-            WinClose, ahk_id %id%
-    }
     Sleep, 2000
 }
 
@@ -931,18 +924,14 @@ UpdateStatus("Game loaded — checking auto-skip")
 CheckAutoSkip()
 SleepWithStop(3000)
 
-WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
-if (!robloxID)
-    WinGet, robloxID, ID, ahk_class Chrome_WidgetWin_1
-
 ; --- Activate window ---
+; Never fall back to a Chrome_WidgetWin_1 window here (old behavior): that
+; class is the user's browser, and activating it means the lobby clicks land
+; in their browser. If the client is gone, the ready-button timeout below
+; routes to FullRestart.
 UpdateStatus("Starting Game")
 WinActivate, ahk_exe RobloxPlayerBeta.exe
 Sleep, 500
-if (!WinExist("ahk_exe RobloxPlayerBeta.exe")) {
-    WinActivate, ahk_class Chrome_WidgetWin_1
-    Sleep, 500
-}
 
 ; --- Lobby clicks ---
 x1 := Round(80  * scaleFactor) , y1 := Round(813  * scaleFactor)
