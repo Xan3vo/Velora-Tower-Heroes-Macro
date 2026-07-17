@@ -563,7 +563,7 @@ function makeEmbed({ title, description, color, fields, footer, ping }) {
   if (description) embed.description = description;
   if (fields) embed.fields = fields;
   if (footer) embed.footer = { text: footer };
-  const payload = { username: 'Tower Heroes Macro', embeds: [embed] };
+  const payload = { username: 'Velora Tower Heroes Macro', embeds: [embed] };
   if (ping) payload.content = ping.trim();
   return payload;
 }
