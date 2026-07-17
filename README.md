@@ -100,10 +100,10 @@ You can do this by clicking the Star button at the top of the page!
   </picture>
 </a>
 
-<a name="license"><details><summary><h4>📝 License & disclaimer</h4></summary></a>
+<a name="license"><details><summary><h4>📝 License</h4></summary></a>
 Copyright © <a href="https://github.com/Xan3vo">Xan3vo</a><br>
 This project is licensed under <a href="./LICENSE">MIT</a>.<br><br>
-Velora simulates normal mouse/keyboard input and never modifies, injects into, or reads the Roblox client. Automated gameplay is nonetheless technically against the <a href="https://en.help.roblox.com/hc/en-us/articles/115004647846">Roblox Terms of Use</a> — enforcement against input macros is rare, but use at your own discretion.
+Velora simulates normal mouse/keyboard input and never modifies, injects into, or reads the Roblox client.
 
 </details>
 
