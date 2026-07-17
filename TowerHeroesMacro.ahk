@@ -48,6 +48,17 @@ if (argsCount >= 2 && A_Args[2] != "")
 ; Arg 6 ("1"/"0"): close the leftover roblox.com browser tab after launch.
 closeBrowserTab := (argsCount >= 6 && A_Args[6] = "1")
 
+; Arg 7: launch method — "auto" (roblox:// deep link, no browser tab; falls
+; back to the browser URL after 2 failed deep-link attempts) or "browser"
+; (always launch via roblox.com in the default browser).
+launchMethod := "auto"
+if (argsCount >= 7 && A_Args[7] = "browser")
+    launchMethod := "browser"
+; Failed deep-link launches this run. Persists across FullRestarts on purpose:
+; once the deep link has failed twice, every later restart goes straight to
+; the browser instead of burning 40s rediscovering the same failure.
+deeplinkFails := 0
+
 ; ============================================================
 ;  SCALE FACTOR
 ; ============================================================
@@ -195,34 +206,60 @@ CloseLeftoverBrowserTab() {
 }
 
 ; ============================================================
+;  ROBLOX LAUNCH HELPERS
+; ============================================================
+
+; Resolve RobloxPlayerBeta.exe directly instead of trusting the roblox://
+; protocol registration. Live-found failure mode: a stale HKCU\Software\
+; Classes\roblox key from a deleted per-user install shadows the valid HKLM
+; machine-wide one, so ShellExecute reports "Application not found" even
+; though Roblox is installed. Reading every registration and validating the
+; exe on disk sidesteps that for any machine. Re-resolved on every launch on
+; purpose — a Roblox self-update mid-session moves the version-* folder.
+; Returns "" if no valid player exe was found.
+FindRobloxPlayerExe() {
+    keys := ["HKEY_CURRENT_USER\Software\Classes\roblox\shell\open\command"
+           , "HKEY_LOCAL_MACHINE\Software\Classes\roblox\shell\open\command"
+           , "HKEY_CURRENT_USER\Software\Classes\roblox-player\shell\open\command"
+           , "HKEY_LOCAL_MACHINE\Software\Classes\roblox-player\shell\open\command"]
+    for i, key in keys {
+        RegRead, cmd, %key%
+        if (!ErrorLevel && RegExMatch(cmd, "i)""([^""]+RobloxPlayerBeta\.exe)""", m) && FileExist(m1))
+            return m1
+    }
+    ; No valid registration — scan the known install roots for the exe.
+    EnvGet, localAppData, LOCALAPPDATA
+    EnvGet, pf86, ProgramFiles(x86)
+    roots := [localAppData . "\Roblox\Versions", pf86 . "\Roblox\Versions", A_ProgramFiles . "\Roblox\Versions"]
+    for i, root in roots {
+        Loop, Files, %root%\RobloxPlayerBeta.exe, R
+            return A_LoopFileLongPath
+    }
+    return ""
+}
+
+; ============================================================
 ;  ROBLOX WINDOW HELPERS
 ; ============================================================
 
-; True while Roblox is still up — either the game client window OR a browser
-; window still titled "Roblox". Used to detect a disconnect / crash so the run
-; can auto-rejoin instead of clicking into a dead window forever.
+; True while the Roblox game client is still up. Used to detect a disconnect /
+; crash so the run can auto-rejoin instead of clicking into a dead window
+; forever. Only the client exe counts: a browser tab titled "Roblox" (the old
+; secondary check) is NOT the game — counting it masked real disconnects
+; whenever the user had roblox.com open, and every caller runs in-game where
+; the client must exist.
 RobloxAlive() {
-    if WinExist("ahk_exe RobloxPlayerBeta.exe")
-        return true
-    WinGet, ids, List, ahk_class Chrome_WidgetWin_1
-    Loop, %ids% {
-        id := ids%A_Index%
-        WinGetTitle, t, ahk_id %id%
-        if (InStr(t, "Roblox"))
-            return true
-    }
-    return false
+    return WinExist("ahk_exe RobloxPlayerBeta.exe") ? true : false
 }
 
+; Close only the game client. This used to also WinClose any Chrome_WidgetWin_1
+; window titled "Roblox" — but that class is Chrome/Edge/Brave, so it closed
+; the user's ENTIRE browser window if their active tab mentioned Roblox
+; (tester-reported on a deep-link launch, where no leftover tab even exists).
+; Leftover browser-tab cleanup is CloseLeftoverBrowserTab's job, gated to
+; browser launches and scoped to one Ctrl+W.
 CloseRobloxWindows() {
     WinClose, ahk_exe RobloxPlayerBeta.exe
-    WinGet, windows, List, ahk_class Chrome_WidgetWin_1
-    Loop, %windows% {
-        id := windows%A_Index%
-        WinGetTitle, title, ahk_id %id%
-        if (InStr(title, "Roblox"))
-            WinClose, ahk_id %id%
-    }
     Sleep, 2000
 }
 
@@ -760,21 +797,58 @@ FileDelete, %macroRunningFile%
 FileAppend, running, %macroRunningFile%
 
 WriteStats()
-UpdateStatus("Launching Roblox")
-Run, https://www.roblox.com/games/4646477729/Tower-Heroes?privateServerLinkCode=30153874208011614870924132818489
-SleepWithStop(15000)
+; Up to 3 attempts in auto mode: deep link, deep link, then the browser URL.
+; In browser mode the first (browser) attempt failing is fatal, as before.
+usedBrowserLaunch := false
+robloxID := 0
+Loop, 3 {
+    CheckForStop()
+    useDeeplink := (launchMethod = "auto" && deeplinkFails < 2)
+    if (useDeeplink) {
+        UpdateStatus("Launching Roblox (deep link)")
+        deepUrl := "roblox://experiences/start?placeId=4646477729&linkCode=30153874208011614870924132818489"
+        ; Prefer invoking the player exe directly — identical to what the
+        ; protocol handler does ("RobloxPlayerBeta.exe" %1) but immune to
+        ; stale/broken roblox:// registrations (see FindRobloxPlayerExe).
+        ; UseErrorLevel: a plain failed Run throws a blocking error dialog
+        ; and kills the thread — the fallback would never fire. Swallow it
+        ; and count the attempt as failed immediately (no 20s wait).
+        playerExe := FindRobloxPlayerExe()
+        if (playerExe != "")
+            Run, "%playerExe%" "%deepUrl%", , UseErrorLevel
+        else
+            Run, %deepUrl%, , UseErrorLevel
+        if (ErrorLevel) {
+            deeplinkFails += 1
+            UpdateStatus(deeplinkFails >= 2 ? "Deep link unavailable - switching to browser launch" : "Deep link launch failed - retrying")
+            Continue
+        }
+    } else {
+        UpdateStatus("Launching Roblox (browser)")
+        Run, https://www.roblox.com/games/4646477729/Tower-Heroes?privateServerLinkCode=30153874208011614870924132818489
+        usedBrowserLaunch := true
+    }
+    SleepWithStop(15000)
 
-WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
-if (!robloxID) {
-    UpdateStatus("Waiting for Roblox to start")
-    Sleep, 5000
     WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
+    if (!robloxID) {
+        UpdateStatus("Waiting for Roblox to start")
+        Sleep, 5000
+        WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
+    }
+    if (robloxID)
+        Break
+    if (!useDeeplink)
+        Break
+    deeplinkFails += 1
+    UpdateStatus(deeplinkFails >= 2 ? "Deep link failed twice - switching to browser launch" : "Deep link launch failed - retrying")
 }
 
 if (robloxID) {
     UpdateStatus("Roblox launcher detected")
-    ; The client is up — the launcher tab in the browser is now dead weight.
-    CloseLeftoverBrowserTab()
+    ; Only a browser launch leaves a tab behind — the deep link never opens one.
+    if (usedBrowserLaunch)
+        CloseLeftoverBrowserTab()
     WinActivate, ahk_id %robloxID%
     Sleep, 1000
     Sleep, 5000
@@ -850,18 +924,14 @@ UpdateStatus("Game loaded — checking auto-skip")
 CheckAutoSkip()
 SleepWithStop(3000)
 
-WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
-if (!robloxID)
-    WinGet, robloxID, ID, ahk_class Chrome_WidgetWin_1
-
 ; --- Activate window ---
+; Never fall back to a Chrome_WidgetWin_1 window here (old behavior): that
+; class is the user's browser, and activating it means the lobby clicks land
+; in their browser. If the client is gone, the ready-button timeout below
+; routes to FullRestart.
 UpdateStatus("Starting Game")
 WinActivate, ahk_exe RobloxPlayerBeta.exe
 Sleep, 500
-if (!WinExist("ahk_exe RobloxPlayerBeta.exe")) {
-    WinActivate, ahk_class Chrome_WidgetWin_1
-    Sleep, 500
-}
 
 ; --- Lobby clicks ---
 x1 := Round(80  * scaleFactor) , y1 := Round(813  * scaleFactor)
