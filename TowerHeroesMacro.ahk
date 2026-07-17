@@ -206,6 +206,39 @@ CloseLeftoverBrowserTab() {
 }
 
 ; ============================================================
+;  ROBLOX LAUNCH HELPERS
+; ============================================================
+
+; Resolve RobloxPlayerBeta.exe directly instead of trusting the roblox://
+; protocol registration. Live-found failure mode: a stale HKCU\Software\
+; Classes\roblox key from a deleted per-user install shadows the valid HKLM
+; machine-wide one, so ShellExecute reports "Application not found" even
+; though Roblox is installed. Reading every registration and validating the
+; exe on disk sidesteps that for any machine. Re-resolved on every launch on
+; purpose — a Roblox self-update mid-session moves the version-* folder.
+; Returns "" if no valid player exe was found.
+FindRobloxPlayerExe() {
+    keys := ["HKEY_CURRENT_USER\Software\Classes\roblox\shell\open\command"
+           , "HKEY_LOCAL_MACHINE\Software\Classes\roblox\shell\open\command"
+           , "HKEY_CURRENT_USER\Software\Classes\roblox-player\shell\open\command"
+           , "HKEY_LOCAL_MACHINE\Software\Classes\roblox-player\shell\open\command"]
+    for i, key in keys {
+        RegRead, cmd, %key%
+        if (!ErrorLevel && RegExMatch(cmd, "i)""([^""]+RobloxPlayerBeta\.exe)""", m) && FileExist(m1))
+            return m1
+    }
+    ; No valid registration — scan the known install roots for the exe.
+    EnvGet, localAppData, LOCALAPPDATA
+    EnvGet, pf86, ProgramFiles(x86)
+    roots := [localAppData . "\Roblox\Versions", pf86 . "\Roblox\Versions", A_ProgramFiles . "\Roblox\Versions"]
+    for i, root in roots {
+        Loop, Files, %root%\RobloxPlayerBeta.exe, R
+            return A_LoopFileLongPath
+    }
+    return ""
+}
+
+; ============================================================
 ;  ROBLOX WINDOW HELPERS
 ; ============================================================
 
@@ -780,11 +813,18 @@ Loop, 3 {
     useDeeplink := (launchMethod = "auto" && deeplinkFails < 2)
     if (useDeeplink) {
         UpdateStatus("Launching Roblox (deep link)")
-        ; UseErrorLevel: if the roblox:// protocol isn't registered on this
-        ; machine, a plain Run throws a blocking error dialog and kills the
-        ; thread — the fallback would never fire. Swallow it, count the
-        ; attempt as failed immediately (no 20s wait), and move on.
-        Run, roblox://experiences/start?placeId=4646477729&linkCode=30153874208011614870924132818489, , UseErrorLevel
+        deepUrl := "roblox://experiences/start?placeId=4646477729&linkCode=30153874208011614870924132818489"
+        ; Prefer invoking the player exe directly — identical to what the
+        ; protocol handler does ("RobloxPlayerBeta.exe" %1) but immune to
+        ; stale/broken roblox:// registrations (see FindRobloxPlayerExe).
+        ; UseErrorLevel: a plain failed Run throws a blocking error dialog
+        ; and kills the thread — the fallback would never fire. Swallow it
+        ; and count the attempt as failed immediately (no 20s wait).
+        playerExe := FindRobloxPlayerExe()
+        if (playerExe != "")
+            Run, "%playerExe%" "%deepUrl%", , UseErrorLevel
+        else
+            Run, %deepUrl%, , UseErrorLevel
         if (ErrorLevel) {
             deeplinkFails += 1
             UpdateStatus(deeplinkFails >= 2 ? "Deep link unavailable - switching to browser launch" : "Deep link launch failed - retrying")
