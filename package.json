@@ -12,6 +12,7 @@
   "build": {
     "appId": "com.towerheroes.macro",
     "productName": "Tower Heroes Macro",
+    "artifactName": "Tower-Heroes-Macro-Setup-${version}.${ext}",
     "publish": {
       "provider": "github",
       "owner": "Xan3vo",
