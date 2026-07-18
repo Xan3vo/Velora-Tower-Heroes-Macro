@@ -844,7 +844,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
     let eventKey = null;
     let emoji = null;
     let color = 'info';
-    if (/placed successfully$|^Both heroes placed$/.test(statusText)) {
+    if (/placed successfully$|^(Both|All) heroes placed$/.test(statusText)) {
       eventKey = 'placements'; emoji = '🦸';
     // NOTE: deliberately not matching the per-tick "Upgrading X (12s)" ticker —
     // it changes every few seconds and would flood the channel / rate limit.

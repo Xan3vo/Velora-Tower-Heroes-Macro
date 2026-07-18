@@ -1081,15 +1081,17 @@
 
   var MODES = ['Easy', 'Medium', 'Hard'];
 
-  // Character image mapping by map and difficulty. Every supported map runs
-  // the same Easy loadout: Kart Kid + Slime King.
-  var EASY_LOADOUT = ['./Images/Kart1.webp', './Images/Slimeking1.webp'];
+  // Character image mapping by map and difficulty. Kart Kid + Slime King run
+  // everywhere; Oddport (hotkey 3 in the macro) is additionally required on
+  // every map except Castle Town.
+  var EASY_LOADOUT   = ['./Images/Kart1.webp', './Images/Slimeking1.webp'];
+  var EASY_LOADOUT_3 = EASY_LOADOUT.concat(['./Images/Oddport1.webp']);
   var CHARACTER_IMAGES = {
     'Castle Town':     { 'Easy': EASY_LOADOUT },
-    'Radiant Reef':    { 'Easy': EASY_LOADOUT },
-    'Oddport Academy': { 'Easy': EASY_LOADOUT },
-    'Corporate Chaos': { 'Easy': EASY_LOADOUT },
-    'Glowing Glacier': { 'Easy': EASY_LOADOUT }
+    'Radiant Reef':    { 'Easy': EASY_LOADOUT_3 },
+    'Oddport Academy': { 'Easy': EASY_LOADOUT_3 },
+    'Corporate Chaos': { 'Easy': EASY_LOADOUT_3 },
+    'Glowing Glacier': { 'Easy': EASY_LOADOUT_3 }
   };
 
   function getCharacterImages() {

@@ -45,6 +45,12 @@ selectedMap := "Castle Town"
 if (argsCount >= 2 && A_Args[2] != "")
     selectedMap := A_Args[2]
 
+; Loadout: Kart Kid (hotkey 1) + Slime King (hotkey 2) everywhere; Oddport
+; (hotkey 3) is additionally required on every map EXCEPT Castle Town.
+; Hero index in this array = its loadout hotkey.
+heroNames := ["Kart Kid", "Slime King", "Oddport"]
+heroCount := (selectedMap = "Castle Town") ? 2 : 3
+
 ; Arg 6 ("1"/"0"): close the leftover roblox.com browser tab after launch.
 closeBrowserTab := (argsCount >= 6 && A_Args[6] = "1")
 
@@ -479,16 +485,17 @@ OcrHeroButton(offsetY) {
     return txt
 }
 
-; Read the slot-1 hero row's title ("Slime King x1" / "Kart Kid x1") in the
-; Hero Data menu via OCR — used for slot detection.
-OcrHeroRowTitle() {
+; Read a hero row's title ("Slime King x1" / "Kart Kid x1" / "Oddport x1") in
+; the Hero Data menu via OCR — used for slot detection. row is 0-based
+; (0 = top row); rows sit 87 baseline px apart.
+OcrHeroRowTitle(row := 0) {
     global scaleFactor
     x := Round(745 * scaleFactor)
-    y := Round(398 * scaleFactor)
+    y := Round((398 + (row * 87)) * scaleFactor)
     w := Round(345 * scaleFactor)
     h := Round(66  * scaleFactor)
     txt := OcrScreenRegion(x, y, w, h)
-    FileAppend, % A_Now . " heroRow1: """ . txt . """`n", %A_Temp%\towerheroes-ocr-ahk.log
+    FileAppend, % A_Now . " heroRow" . (row + 1) . ": """ . txt . """`n", %A_Temp%\towerheroes-ocr-ahk.log
     return txt
 }
 
@@ -1054,27 +1061,26 @@ closeHeroX := Round(1889 * scaleFactor)
 closeHeroY := Round(320  * scaleFactor)
 
 ; ============================================================
-;  PHASE 1 — PLACE BOTH HEROES, THEN CONFIRM VIA CARD SLOTS
-;  Run the placement sequence for BOTH heroes (Kart Kid = hotkey 1,
-;  Slime King = hotkey 2), then open the hero menu once and check the
-;  two hero-card slots. A slot reading its logged "used up" color means
-;  that hero is placed; both used up = both heroes on the field.
+;  PHASE 1 — PLACE ALL HEROES, THEN CONFIRM VIA CARD SLOTS
+;  Run the placement sequence for every hero in the loadout (hotkey =
+;  loadout slot: Kart Kid 1, Slime King 2, Oddport 3 on non-Castle-Town
+;  maps), then open the hero menu once and check the hero-card slots.
+;  A slot reading its logged "used up" color means that hero is placed;
+;  all used up = the full loadout is on the field.
 ;  Card-slot coords + "placed" colors were captured with PixelInspector.
 ; ============================================================
 
 ; A placed hero greys its card slot out (~0x575857). An EMPTY slot is
 ; transparent, so its color depends on the background and can't be matched —
 ; we therefore only detect the grey "filled" state (grey = placed, anything
-; else = not placed). Coords are real grey samples logged with PixelInspector.
-card1X := Round(1872 * scaleFactor)   ; slot 1 (Kart Kid, placed first)
-card1Y := Round(422  * scaleFactor)
-card2X := Round(1870 * scaleFactor)   ; slot 2 (Slime King, placed second)
-card2Y := Round(516  * scaleFactor)
+; else = not placed). Slots 1/2 are real grey samples logged with
+; PixelInspector; slot 3 is extrapolated from their ~94px baseline pitch.
 CARD_GREY := 0x575857                  ; grey shown on a filled/used card slot
 CARD_TOL  := 24                        ; per-channel color tolerance
+cardX := [Round(1872 * scaleFactor), Round(1870 * scaleFactor), Round(1870 * scaleFactor)]
+cardY := [Round(422  * scaleFactor), Round(516  * scaleFactor), Round(610  * scaleFactor)]
 
-placed1 := false
-placed2 := false
+placed := [false, false, false]
 placeAttempts    := 0
 maxPlaceAttempts := 10
 
@@ -1087,39 +1093,45 @@ Loop {
     placeAttempts += 1
 
     ; Run the placement sequence for whichever heroes aren't confirmed yet.
-    if (!placed1) {
-        UpdateStatus("Placing Kart Kid (attempt " placeAttempts ")")
-        Send, 1
-        Sleep, 500
-        RandomPlaceClicks()
-    }
-    if (!placed2) {
-        UpdateStatus("Placing Slime King (attempt " placeAttempts ")")
-        Send, 2
-        Sleep, 500
-        RandomPlaceClicks()
+    lastKey := heroCount
+    Loop, %heroCount% {
+        heroIdx := A_Index
+        if (!placed[heroIdx]) {
+            heroName := heroNames[heroIdx]
+            UpdateStatus("Placing " . heroName . " (attempt " . placeAttempts . ")")
+            Send, %heroIdx%
+            Sleep, 500
+            RandomPlaceClicks()
+            lastKey := heroIdx
+        }
     }
 
-    ; Deselect, then open the hero menu to confirm placement.
-    Send, 2
+    ; Deselect the last hero attempted (pressing an already-placed hero's key
+    ; is a no-op — its card is used up), then open the menu to confirm.
+    Send, %lastKey%
     Sleep, 300
     Send, n
     Sleep, 2000
 
     ; Scan a short vertical strip around each logged point so a few px of drift
-    ; still catches the grey trim of a filled card.
-    placed1 := SlotFilledGrey(card1X, card1Y, CARD_GREY, CARD_TOL)
-    placed2 := SlotFilledGrey(card2X, card2Y, CARD_GREY, CARD_TOL)
+    ; still catches the grey trim of a filled card. Log the center colors seen
+    ; so the references can be tuned if needed.
+    allPlaced := true
+    cardLog   := ""
+    Loop, %heroCount% {
+        heroIdx := A_Index
+        placed[heroIdx] := SlotFilledGrey(cardX[heroIdx], cardY[heroIdx], CARD_GREY, CARD_TOL)
+        if (!placed[heroIdx])
+            allPlaced := false
+        px := cardX[heroIdx], py := cardY[heroIdx]
+        PixelGetColor, cardC, %px%, %py%, RGB
+        cardLog .= (heroIdx > 1 ? ", " : "") . "s" . heroIdx . " " . Format("0x{:06X}", cardC & 0xFFFFFF)
+                 . " (" . (placed[heroIdx] ? "placed" : "empty") . ")"
+    }
+    UpdateStatus("Cards: " . cardLog)
 
-    ; Log the center colors seen so the references can be tuned if needed.
-    PixelGetColor, c1, %card1X%, %card1Y%, RGB
-    PixelGetColor, c2, %card2X%, %card2Y%, RGB
-    h1 := Format("0x{:06X}", c1 & 0xFFFFFF)
-    h2 := Format("0x{:06X}", c2 & 0xFFFFFF)
-    UpdateStatus("Cards: s1 " h1 " (" (placed1 ? "placed" : "empty") "), s2 " h2 " (" (placed2 ? "placed" : "empty") ")")
-
-    if (placed1 && placed2) {
-        UpdateStatus("Both heroes placed")
+    if (allPlaced) {
+        UpdateStatus("All heroes placed")
         Break
     }
 
@@ -1130,47 +1142,70 @@ Loop {
 
 ; ============================================================
 ;  SLOT DETECTION
-;  The hero menu can put Slime King in slot 1 or slot 2. Primary: OCR the
-;  slot-1 row title ("Slime King x1" / "Kart Kid x1"). Fallback (OCR
-;  unavailable): white pixel at the logged spot = Slime King in slot 1.
-;  The pixel probe alone proved unreliable at 1080p — it sits at the very
-;  edge of the title text and lands on grey background there.
+;  The hero menu lists the placed heroes in arbitrary row order. Primary:
+;  OCR each row's title ("Slime King x1" / "Kart Kid x1" / "Oddport x1")
+;  and match by name; rows OCR couldn't identify are filled in by
+;  elimination (loadout order when several are unknown). 2-hero fallback
+;  (OCR unavailable): legacy white pixel probe at the slot-1 title —
+;  unreliable at 1080p (lands on grey past the title text), last resort.
 ; ============================================================
 
-row1Title := OcrHeroRowTitle()
-if (InStr(row1Title, "Slime")) {
-    slimeSlot := 1
-} else if (InStr(row1Title, "Kart")) {
-    slimeSlot := 2
-} else {
+slotHero := ["", "", ""]
+Loop, %heroCount% {
+    rowTxt := OcrHeroRowTitle(A_Index - 1)
+    if (InStr(rowTxt, "Slime"))
+        slotHero[A_Index] := "Slime King"
+    else if (InStr(rowTxt, "Kart"))
+        slotHero[A_Index] := "Kart Kid"
+    else if (InStr(rowTxt, "Odd"))
+        slotHero[A_Index] := "Oddport"
+}
+if (heroCount = 2 && slotHero[1] = "" && slotHero[2] = "") {
     slimeCheckX := Round(1069 * scaleFactor)
     slimeCheckY := Round(425  * scaleFactor)
     PixelGetColor, slotCheckColor, %slimeCheckX%, %slimeCheckY%, RGB
-    if (ColorClose(slotCheckColor, 0xFFFFFF, 24))
-        slimeSlot := 1
-    else
-        slimeSlot := 2
+    slotHero[1] := ColorClose(slotCheckColor, 0xFFFFFF, 24) ? "Slime King" : "Kart Kid"
 }
-kartSlot := (slimeSlot = 1) ? 2 : 1
-UpdateStatus("Slots — Slime King: slot " slimeSlot ", Kart Kid: slot " kartSlot)
+; Fill unidentified rows with the heroes not seen yet, in loadout order.
+remaining := []
+Loop, %heroCount% {
+    candName := heroNames[A_Index]
+    seen := false
+    Loop, %heroCount% {
+        if (slotHero[A_Index] = candName)
+            seen := true
+    }
+    if (!seen)
+        remaining.Push(candName)
+}
+Loop, %heroCount% {
+    if (slotHero[A_Index] = "" && remaining.Length() > 0)
+        slotHero[A_Index] := remaining.RemoveAt(1)
+}
+slotMsg := ""
+Loop, %heroCount%
+    slotMsg .= (A_Index > 1 ? ", " : "") . "slot " . A_Index . ": " . slotHero[A_Index]
+UpdateStatus("Slots — " . slotMsg)
 
 ; ============================================================
-;  PHASE 2 — UPGRADE BOTH HEROES (slot-1 hero first, until maxed)
+;  PHASE 2 — UPGRADE ALL HEROES (top row first, each until maxed)
 ; ============================================================
 
-; Upgrade-button coords + IsMaxed row offset per slot (slot 1 = top row).
-slot1UpX := Round(1262 * scaleFactor), slot1UpY := Round(425 * scaleFactor)
-slot2UpX := Round(1327 * scaleFactor), slot2UpY := Round(512 * scaleFactor)
-slot2OffsetY := Round(87 * scaleFactor)
+; Upgrade-button coords + IsMaxed row offset per slot (rows sit 87 baseline
+; px apart; slot 3's coords are extrapolated from the measured slot-2 row).
+upX := [Round(1262 * scaleFactor), Round(1327 * scaleFactor), Round(1327 * scaleFactor)]
+upY := [Round(425  * scaleFactor), Round(512  * scaleFactor), Round(599  * scaleFactor)]
 
-if (slimeSlot = 1) {
-    ; Slime King in slot 1 -> upgrade Slime King first, then Kart Kid.
-    UpgradeHeroUntilMaxed(slot1UpX, slot1UpY, 0,            60, 210, "Slime King (slot 1)")
-    UpgradeHeroUntilMaxed(slot2UpX, slot2UpY, slot2OffsetY, 60, 180, "Kart Kid (slot 2)")
-} else {
-    ; Kart Kid in slot 1 -> upgrade Kart Kid first, then Slime King.
-    UpgradeHeroUntilMaxed(slot1UpX, slot1UpY, 0,            60, 180, "Kart Kid (slot 1)")
-    UpgradeHeroUntilMaxed(slot2UpX, slot2UpY, slot2OffsetY, 60, 210, "Slime King (slot 2)")
+Loop, %heroCount% {
+    s := A_Index
+    upName  := slotHero[s]
+    upLabel := (upName != "" ? upName : "Hero") . " (slot " . s . ")"
+    ; Kart Kid maxes fastest (180s cap); Slime King needs 210s. Unknown rows
+    ; get the long cap — IsMaxedSmart ends the loop early on a MAX read.
+    upCap := (upName = "Kart Kid") ? 180 : 210
+    UpgradeHeroUntilMaxed(upX[s], upY[s], Round(87 * (s - 1) * scaleFactor), 60, upCap, upLabel)
+    if (robloxDead)
+        Break
 }
 
 ; A disconnect during upgrades trips this flag — rejoin instead of pressing on.
