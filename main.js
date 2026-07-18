@@ -883,6 +883,20 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
       if (stripXP) xp = parseFloat(stripXP[1].replace(/,/g, ''));
       if (xp !== null && !Number.isFinite(xp)) xp = null;
     }
+    if (xp === null) {
+      // Live 1440p: OCR dropped the "EXP" label from BOTH the exp box (read
+      // just "EXP", digits lost) and the strip ("210 9.3 <username> game
+      // lasted for 10 : 39") — the label anchor above found nothing. The
+      // reward row is always "coins+icon blob, then XP", so fall back to the
+      // second number of the first whitespace-adjacent pair. Username digits
+      // ("Umarurt123s") and the time ("10 : 39") can't pair up: letters and
+      // the colon break the adjacency.
+      const pair = (rewardsText || '').match(/(\d[\d.,]*)\s+(\d[\d.,]*)/);
+      if (pair) {
+        const n = parseFloat(pair[2].replace(/,/g, ''));
+        if (Number.isFinite(n)) xp = n;
+      }
+    }
     return { coins, xp };
   };
   const captureRoundRewards = () => {
