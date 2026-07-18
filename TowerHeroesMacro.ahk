@@ -968,6 +968,16 @@ if (selectedMap != "Castle Town") {
     MouseClick, left, %mapsTabX%, %mapsTabY%
     Sleep, 1000
     CheckForStop()
+    ; Oddport Academy is a SPECIAL map: its tile lives behind an extra
+    ; special-maps button (logged with PixelInspector at 1440p) that must be
+    ; clicked before the tile list is scanned/scrolled.
+    if (selectedMap = "Oddport Academy") {
+        specialX := Round(1106 * scaleFactor)
+        specialY := Round(451  * scaleFactor)
+        MouseClick, left, %specialX%, %specialY%
+        Sleep, 1000
+        CheckForStop()
+    }
     if (!SelectMapTile(selectedMap)) {
         UpdateStatus("Could not find map '" . selectedMap . "' — full restart")
         Goto FullRestart
