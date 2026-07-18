@@ -265,8 +265,19 @@ RobloxAlive() {
 ; Leftover browser-tab cleanup is CloseLeftoverBrowserTab's job, gated to
 ; browser launches and scoped to one Ctrl+W.
 CloseRobloxWindows() {
-    WinClose, ahk_exe RobloxPlayerBeta.exe
+    ; Close EVERY client window (usually just one), not only the topmost.
+    WinGet, robloxWins, List, ahk_exe RobloxPlayerBeta.exe
+    Loop, %robloxWins% {
+        winId := robloxWins%A_Index%
+        WinClose, ahk_id %winId%
+    }
     Sleep, 2000
+    ; A hung client (e.g. stuck before the play button) can ignore WM_CLOSE —
+    ; force-kill so a relaunch never targets a dead window.
+    if (WinExist("ahk_exe RobloxPlayerBeta.exe")) {
+        Process, Close, RobloxPlayerBeta.exe
+        Sleep, 1000
+    }
 }
 
 ; ============================================================
@@ -792,6 +803,13 @@ FullRestart:
 ; A stop pressed just before a restart must win — otherwise we'd relaunch
 ; Roblox (and open a fresh browser tab) on our way out.
 CheckForStop()
+; Close any existing Roblox client before relaunching. Timeout paths (play
+; button, ready button, map pick, placement) arrive here with a live-but-
+; stuck client — relaunching on top of it is unreliable. No-op if it died.
+if (hasLaunchedOnce) {
+    UpdateStatus("Closing Roblox before restart")
+    CloseRobloxWindows()
+}
 ; Count every restart after the first launch (initial fall-through is not one).
 if (hasLaunchedOnce) {
     restartCount += 1
