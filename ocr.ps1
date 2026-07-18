@@ -16,6 +16,7 @@ param(
     [int]$H = 0,
     [string]$File = "",
     [string]$OutFile = "",   # write result here instead of stdout (AHK-friendly)
+    [string]$SavePng = "",   # also save the RAW capture (pre-upscale) here, for offline recalibration
     [int]$Scale = 3,
     [int]$Pad = 8,
     [switch]$Digits,
@@ -62,6 +63,12 @@ try {
         $g = [System.Drawing.Graphics]::FromImage($src)
         $g.CopyFromScreen($X, $Y, 0, 0, (New-Object System.Drawing.Size $W, $H))
         $g.Dispose()
+    }
+
+    # Keep the raw pixels when asked — a misread can then be reproduced and the
+    # region recalibrated offline (crop + re-OCR) instead of nudging blind.
+    if ($SavePng -ne "") {
+        try { $src.Save($SavePng, [System.Drawing.Imaging.ImageFormat]::Png) } catch {}
     }
 
     # Upscale (+ a padded margin) and OCR. Small on-screen numbers read far

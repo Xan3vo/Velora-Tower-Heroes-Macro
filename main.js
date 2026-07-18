@@ -460,7 +460,9 @@ function getOcrRegions() {
 
 // OCR a screen region; resolves to the recognized text ('' on any failure —
 // OCR is cosmetic (stats/webhook), so it must never break a run).
-function ocrRegion(region, scale) {
+// savePng: optional path — ocr.ps1 also writes the raw capture there, so a
+// misread round leaves the actual pixels behind for offline recalibration.
+function ocrRegion(region, scale, savePng) {
   return new Promise((resolve) => {
     const args = [
       '-NoProfile', '-ExecutionPolicy', 'Bypass',
@@ -470,6 +472,7 @@ function ocrRegion(region, scale) {
       '-W', String(Math.round(region.w * scale)),
       '-H', String(Math.round(region.h * scale)),
     ];
+    if (savePng) args.push('-SavePng', savePng);
     let out = '';
     try {
       const p = spawn('powershell.exe', args, { windowsHide: true });
@@ -866,10 +869,14 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
 
   const captureRewardsOnce = () => {
     const R = getOcrRegions();
+    // Keep the raw round captures (overwritten each round) so a misread can be
+    // recalibrated offline from the real pixels — see userData\ocr-captures.
+    const capDir = path.join(app.getPath('userData'), 'ocr-captures');
+    try { fs.mkdirSync(capDir, { recursive: true }); } catch (err) { /* capture is best-effort */ }
     return Promise.all([
-      ocrRegion(R.coins, ocrScale),
-      ocrRegion(R.exp, ocrScale),
-      ocrRegion(R.rewards, ocrScale),
+      ocrRegion(R.coins, ocrScale, path.join(capDir, 'coins-last.png')),
+      ocrRegion(R.exp, ocrScale, path.join(capDir, 'exp-last.png')),
+      ocrRegion(R.rewards, ocrScale, path.join(capDir, 'rewards-last.png')),
       ocrRegion(R.mana, ocrScale),
     ]);
   };
