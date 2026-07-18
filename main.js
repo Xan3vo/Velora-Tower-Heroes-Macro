@@ -423,10 +423,13 @@ ipcMain.handle('get-lifetime-stats', () => loadLifetimeStats());
 // vertically leaks "Wave 7" / "1:57" digits in, and the coins fallback takes
 // the first number it sees.)
 const OCR_REGION_DEFAULTS = {
-  coins: { x: 850,  y: 700, w: 277, h: 180 }, // coins number. Two hard-won constraints:
-  // (1) right edge 1127 stops SHORT of the coin icon (icon x~1133-1210, digits
-  //     end ~1115, right-aligned against it so longer numbers grow left) —
-  //     any icon sliver OCRs as a trailing digit ("211" for 21 coins, live 1080p);
+  coins: { x: 850,  y: 700, w: 268, h: 180 }, // coins number. Two hard-won constraints:
+  // (1) right edge 1118 stops SHORT of the coin icon (digits end ~1115,
+  //     right-aligned against it so longer numbers grow left) — any icon
+  //     sliver OCRs as a trailing digit ("211" for 21 coins, live 1080p).
+  //     Edge was 1127 (icon x~1133 on the 1080p-derived measurements) but a
+  //     live 1440p round still caught a sliver ("330" for 33 coins) — the
+  //     icon sits further left at real 1440p, so the edge hugs the digits;
   // (2) top edge 700 reaches up to the digit-free "Campaign Mode Rewards" label —
   //     Windows OCR flat-out refuses a short bare number alone in the box (a
   //     clean binarized "21" read "" at most scales!), but reads it reliably
