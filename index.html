@@ -656,6 +656,9 @@
     color: #cdd6ef;
   }
   .chip .cdot { width: 6px; height: 6px; border-radius: 50%; background: #3670f2; }
+  /* Clickable chips (Guide → Links) open an external URL via the main process. */
+  .chip.guide-link { cursor: pointer; transition: background .15s, border-color .15s; }
+  .chip.guide-link:hover { background: #212a40; border-color: #3670f2; color: #eaf0ff; }
 
   /* Hotkeys */
   .kbd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 16px; }
@@ -896,6 +899,12 @@
           While the macro runs, <b>don't move the mouse or type</b> — it's clicking real pixels on your screen.
           Keep Roblox fullscreen on your main monitor. Press <b>F3</b> any time to take back control.
         </span></div>
+
+        <h4 class="guide-h">Links</h4>
+        <div class="chip-row">
+          <span class="chip guide-link" data-link="website" title="towerherosmacro.site"><span class="cdot"></span>Website</span>
+          <span class="chip guide-link" data-link="github" title="GitHub repository"><span class="cdot"></span>GitHub</span>
+        </div>
       </div>
 
       <div id="gtab-how" class="guide-tabpane">
@@ -1035,6 +1044,13 @@
         <circle cx="12" cy="12" r="10"></circle>
         <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
         <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+    </button>
+    <button class="icon-btn" id="website-btn" title="Website — towerherosmacro.site" aria-label="Open the Velora website">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
       </svg>
     </button>
   </div>
@@ -1617,6 +1633,17 @@
     });
     if (guideOverlay) guideOverlay.addEventListener('click', function(e) {
       if (e.target === guideOverlay) closeGuide();
+    });
+
+    // Website button + the Guide's link chips — main opens the fixed URL for
+    // each key (see EXTERNAL_LINKS in main.js).
+    function openLink(key) {
+      if (window.electronAPI && window.electronAPI.openLink) window.electronAPI.openLink(key);
+    }
+    var websiteBtn = document.getElementById('website-btn');
+    if (websiteBtn) websiteBtn.addEventListener('click', function() { openLink('website'); });
+    document.querySelectorAll('.guide-link').forEach(function(chip) {
+      chip.addEventListener('click', function() { openLink(chip.dataset.link); });
     });
 
     // Settings tab bar.

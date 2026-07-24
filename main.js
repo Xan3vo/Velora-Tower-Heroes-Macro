@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const { exec, spawn, execSync } = require('child_process');
 
-const AHK_DOWNLOAD_URL = 'https://www.autohotkey.com/download/ahk-v1.exe';
+const AHK_DOWNLOAD_URL = 'https://www.autohotkey.com/download/ahk-install.exe';
+const AHK_WEBSITE_URL = 'https://www.autohotkey.com';
 
 // Locate an AutoHotkey **v1.1** interpreter. The "U"/"A" exe variants
 // (AutoHotkeyU64/U32/A32) are v1-only — v2 ships AutoHotkey64/32 without the
@@ -270,14 +271,16 @@ function resolveAhkOrPrompt(win) {
     message: 'AutoHotkey v1.1 was not found on this PC.',
     detail:
       'This macro needs AutoHotkey version 1.1 (not v2).\n\n' +
-      'Click "Download AutoHotkey 1.1" to get the correct installer, run it, ' +
-      'then try again.',
-    buttons: ['Download AutoHotkey 1.1', 'Cancel'],
+      'Click "Download AutoHotkey" to get the installer, run it, then try ' +
+      'again. "Visit Website" opens autohotkey.com if you need the docs or ' +
+      'a different version.',
+    buttons: ['Download AutoHotkey', 'Visit Website', 'Cancel'],
     defaultId: 0,
-    cancelId: 1,
+    cancelId: 2,
     noLink: true,
   });
   if (choice === 0) shell.openExternal(AHK_DOWNLOAD_URL);
+  else if (choice === 1) shell.openExternal(AHK_WEBSITE_URL);
   return null;
 }
 
@@ -530,6 +533,27 @@ function ocrDebugLog(line) {
       path.join(app.getPath('userData'), 'ocr-debug.log'),
       `[${new Date().toISOString()}] ${line}\n`, 'utf8');
   } catch (err) { /* never let logging break anything */ }
+}
+
+// ---- Public maps-completed counter -----------------------------------------
+// Fire-and-forget GET that bumps the counter shown on towerherosmacro.site.
+// Sends nothing but the hit itself (no user data). Failures are logged and
+// swallowed — a down counter must never affect a run.
+const MAP_COUNTER_URL = 'https://countapi.mileshilliard.com/api/v1/hit/velora_tower_heroes_maps_xan3vo';
+function hitMapCounter() {
+  try {
+    const https = require('https');
+    const req = https.get(MAP_COUNTER_URL, (res) => {
+      res.resume();
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        console.error('Map counter hit failed: HTTP', res.statusCode);
+      }
+    });
+    req.on('error', (err) => console.error('Map counter hit failed:', err.message));
+    req.setTimeout(8000, () => { req.destroy(); });
+  } catch (err) {
+    console.error('Map counter hit failed:', err.message);
+  }
 }
 
 // ---- Discord webhook --------------------------------------------------------
@@ -958,7 +982,10 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
         sendStatusWebhook(statusText);
         // Edge-trigger on the transition into "Map completed": the macro holds
         // the results dialog open ~4s, during which we OCR the rewards.
-        if (statusText === 'Map completed') captureRoundRewards();
+        if (statusText === 'Map completed') {
+          captureRoundRewards();
+          hitMapCounter();
+        }
       }
     } catch (err) {
       console.error('Status read error', err.message);
@@ -1222,6 +1249,18 @@ ipcMain.handle('install-update', () => {
   return true;
 });
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+// Open one of a fixed set of project links in the user's browser. Keyed rather
+// than URL-passing so the renderer can never hand shell.openExternal an
+// arbitrary target.
+const EXTERNAL_LINKS = {
+  website: 'https://www.towerherosmacro.site',
+  github: 'https://github.com/Xan3vo/Velora-Tower-Heroes-Macro',
+};
+ipcMain.on('open-link', (event, key) => {
+  const url = EXTERNAL_LINKS[key];
+  if (url) shell.openExternal(url);
+});
 
 app.whenReady().then(() => {
   createWindow();
