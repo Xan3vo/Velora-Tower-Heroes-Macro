@@ -17,7 +17,7 @@ Feel free to give us a Star on GitHub!
 IMPORTANT:
 Make sure you are only downloading from an official source!
 The only official sources are:
- - our website (https://www.towerherosmacro.site)
+ - our website (https://towerheroesmacro.site)
  - our GitHub page (https://github.com/Xan3vo/Velora-Tower-Heroes-Macro)
 
 >>> IGNORE BELOW THIS LINE <<<
@@ -25,7 +25,7 @@ The only official sources are:
 
 <!-- official source warning -->
 > [!CAUTION]
-> The only official places to download Velora are [towerherosmacro.site][website-link] and this repository's [Releases page][latest-release-link]. Downloads from anywhere else may be tampered with.
+> The only official places to download Velora are [towerheroesmacro.site][website-link] and this repository's [Releases page][latest-release-link]. Downloads from anywhere else may be tampered with.
 
 <div align="center">
 
@@ -44,14 +44,14 @@ The only official sources are:
 An open-source *Tower Heroes* macro — Electron UI on an AutoHotkey engine, with OCR game-reading, live stats, and Discord reporting!<br>
 It places **Kart Kid + Slime King**, maxes them, wins the round, collects, and loops — unattended, for hours.
 <br><br>
-🌐 **[towerherosmacro.site][website-link]** — downloads, guides, and a live count of maps Velora has finished.
+🌐 **[towerheroesmacro.site][website-link]** — downloads, guides, and a live count of maps Velora has finished.
 
 </div>
 
 
 <a name="installation"><h2>🛠️ Installation</h2></a>
 
-1. Download `Tower-Heroes-Macro-Setup-#.#.#.exe` from [towerherosmacro.site][website-link] or the [latest release][latest-release-link]
+1. Download `Tower-Heroes-Macro-Setup-#.#.#.exe` from [towerheroesmacro.site][website-link] or the [latest release][latest-release-link]
 2. Run it — if Windows SmartScreen warns (unsigned installer), click **More info → Run anyway**
 3. Install [AutoHotkey v1.1][ahk-link] *(not v2)* if you don't have it
 4. Launch Velora, pick a map, pick **Easy**, and press **Play** (or `F1`)
@@ -112,8 +112,8 @@ Velora simulates normal mouse/keyboard input and never modifies, injects into, o
 </details>
 
 <!-- links -->
-[website-shield]: https://img.shields.io/badge/website-towerherosmacro.site-3670f2?logo=googlechrome&logoColor=white&labelColor=black
-[website-link]: https://www.towerherosmacro.site
+[website-shield]: https://img.shields.io/badge/website-towerheroesmacro.site-3670f2?logo=googlechrome&logoColor=white&labelColor=black
+[website-link]: https://towerheroesmacro.site
 [latest-release-shield]: https://img.shields.io/github/v/release/Xan3vo/Velora-Tower-Heroes-Macro?logo=github&logoColor=white&labelColor=black&color=3670f2
 [latest-release-link]: https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/releases/latest
 [downloads-shield]: https://img.shields.io/github/downloads/Xan3vo/Velora-Tower-Heroes-Macro/total?label=downloads&labelColor=black&color=40ca53

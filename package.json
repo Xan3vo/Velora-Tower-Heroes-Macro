@@ -3,7 +3,7 @@
   "version": "1.4.0",
   "description": "Velora - auto-farmer for Roblox Tower Heroes",
   "author": "Xan3vo",
-  "homepage": "https://www.towerherosmacro.site",
+  "homepage": "https://towerheroesmacro.site",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

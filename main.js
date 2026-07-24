@@ -536,7 +536,7 @@ function ocrDebugLog(line) {
 }
 
 // ---- Public maps-completed counter -----------------------------------------
-// Fire-and-forget GET that bumps the counter shown on towerherosmacro.site.
+// Fire-and-forget GET that bumps the counter shown on towerheroesmacro.site.
 // Sends nothing but the hit itself (no user data). Failures are logged and
 // swallowed — a down counter must never affect a run.
 const MAP_COUNTER_URL = 'https://countapi.mileshilliard.com/api/v1/hit/velora_tower_heroes_maps_xan3vo';
@@ -1254,7 +1254,7 @@ ipcMain.handle('get-app-version', () => app.getVersion());
 // than URL-passing so the renderer can never hand shell.openExternal an
 // arbitrary target.
 const EXTERNAL_LINKS = {
-  website: 'https://www.towerherosmacro.site',
+  website: 'https://towerheroesmacro.site',
   github: 'https://github.com/Xan3vo/Velora-Tower-Heroes-Macro',
 };
 ipcMain.on('open-link', (event, key) => {
