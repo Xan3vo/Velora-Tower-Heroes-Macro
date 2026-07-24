@@ -578,6 +578,12 @@ function discordPing() {
   return id ? `<@${id}> ` : '';
 }
 
+// Every webhook message posts as "Velora" with our logo, overriding whatever
+// name/avatar the user gave the webhook in Discord. The avatar is the logo in
+// the public repo, served raw so Discord can fetch it.
+const WEBHOOK_NAME = 'Velora';
+const WEBHOOK_AVATAR = 'https://raw.githubusercontent.com/Xan3vo/Velora-Tower-Heroes-Macro/main/Images/logo.png';
+
 // Build a one-embed payload. Every webhook message is an embed for a uniform
 // look; `ping` (a "<@id> " prefix or '') goes in `content` because mentions
 // inside embeds render but never actually notify the user.
@@ -593,7 +599,7 @@ function makeEmbed({ title, description, color, fields, footer, ping }) {
   if (description) embed.description = description;
   if (fields) embed.fields = fields;
   if (footer) embed.footer = { text: footer };
-  const payload = { username: 'Velora Tower Heroes Macro', embeds: [embed] };
+  const payload = { username: WEBHOOK_NAME, avatar_url: WEBHOOK_AVATAR, embeds: [embed] };
   if (ping) payload.content = ping.trim();
   return payload;
 }
@@ -643,7 +649,6 @@ ipcMain.handle('test-webhook', (e, url) => {
 const SUPPORTED_RESOLUTIONS = [
   [2560, 1440],
   [1920, 1080],
-  [3840, 2160],
 ];
 
 // Check the primary display's real resolution and scaling against what the
@@ -683,7 +688,7 @@ function checkDisplaySupport() {
       detail:
         `Your resolution (${physW}x${physH}) isn't supported.\n\n` +
         'Fix: Settings > System > Display > Display resolution — set it to one of:\n' +
-        '   - 2560 x 1440\n   - 1920 x 1080\n   - 3840 x 2160\n\n' +
+        '   - 2560 x 1440\n   - 1920 x 1080\n\n' +
         'Then start the macro again.',
     };
   }
@@ -846,6 +851,11 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   let sessionCoins = 0;
   let sessionXP = 0;
   let sessionMana = null;   // latest live-mana read (null until first success)
+  // Live-mana OCR only makes sense inside a match — the mana counter isn't on
+  // screen in the lobby/loading, so reading it there just yields junk. Gate the
+  // poll on this: flipped true when the macro reports it's in the match
+  // ("Map loaded" / "Gathering Mana"), false once the round ends.
+  let inMatch = false;
 
   const sendRoundWebhook = (roundCoins, roundXP) => {
     const sec = Math.floor((Date.now() - runStartTime) / 1000);
@@ -963,6 +973,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
 
   // Live mana for the overlay + webhook: light OCR poll while the macro runs.
   const manaPoll = setInterval(() => {
+    if (!inMatch) return; // don't OCR the mana region until we're in a match
     ocrRegion(getOcrRegions().mana, ocrScale).then((t) => {
       const v = parseOcrNumber(t);
       if (v !== null) sessionMana = v;
@@ -980,6 +991,11 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
         console.log('Status:', statusText);
         sendStatusUpdate(statusText);
         sendStatusWebhook(statusText);
+        // Gate live-mana OCR to when we're actually in the match: on once the
+        // map loads / mana-gather begins, off once the round ends (the counter
+        // leaves the screen in the lobby, so reading it there is just noise).
+        if (statusText === 'Map loaded' || statusText === 'Gathering Mana') inMatch = true;
+        else if (statusText === 'Map completed') inMatch = false;
         // Edge-trigger on the transition into "Map completed": the macro holds
         // the results dialog open ~4s, during which we OCR the rewards.
         if (statusText === 'Map completed') {

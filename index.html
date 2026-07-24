@@ -794,7 +794,7 @@
   </div>
 </div>
 
-<!-- SETTINGS MODAL (tabbed: General / Discord / Advanced) -->
+<!-- SETTINGS MODAL (tabbed: General / Discord) -->
 <div id="settings-overlay" class="settings-overlay">
   <div class="settings-card debug-card">
     <div class="settings-header">
@@ -804,7 +804,6 @@
     <div class="settings-tabs">
       <button class="settings-tab active" type="button" data-tab="general">General</button>
       <button class="settings-tab" type="button" data-tab="discord">Discord</button>
-      <button class="settings-tab" type="button" data-tab="advanced">Advanced</button>
     </div>
 
     <div id="tab-general" class="settings-tabpane active">
@@ -828,23 +827,10 @@
       <div id="webhook-rows"></div>
     </div>
 
-    <div id="tab-advanced" class="settings-tabpane">
-      <div class="debug-warning">
-        ⚠️ Advanced settings. These boxes tell the app where on screen to read coins, XP and mana
-        (coordinates on a 2560×1440 baseline — scaled automatically for other resolutions).
-        Wrong values silently break reward tracking and the Discord embeds.
-        Only change them if OCR keeps misreading, and use <b>Test</b> with the game visible on screen.
-      </div>
-      <div id="debug-rows"></div>
-      <div class="settings-tools">
-        <button id="ocr-reset-btn" class="tool-btn" type="button">Reset to defaults</button>
-        <div class="settings-desc">Discards all region overrides and restores the built-in coordinates.</div>
-      </div>
-    </div>
   </div>
 </div>
 
-<!-- GUIDE MODAL (tabbed: Start / How it works / Discord / Fixes) -->
+<!-- GUIDE MODAL (tabbed: Setup / Discord / Fixes) -->
 <div id="guide-overlay" class="settings-overlay">
   <div class="settings-card guide-card">
     <div class="settings-header">
@@ -852,32 +838,35 @@
       <span id="guide-close" class="settings-close-x" title="Close">&times;</span>
     </div>
     <div class="guide-tabs">
-      <button class="guide-tab active" type="button" data-gtab="start">Start</button>
-      <button class="guide-tab" type="button" data-gtab="how">How it works</button>
+      <button class="guide-tab active" type="button" data-gtab="start">Setup</button>
       <button class="guide-tab" type="button" data-gtab="discord">Discord</button>
       <button class="guide-tab" type="button" data-gtab="fixes">Fixes</button>
     </div>
     <div class="guide-body">
 
       <div id="gtab-start" class="guide-tabpane active">
+        <div class="callout tip"><span class="ico">🤖</span><span>
+          Velora plays <i>Tower Heroes</i> for you — it opens a private server, places and maxes your heroes, wins the round, banks the rewards, and loops. Hands-off, for hours.
+        </span></div>
+
         <div class="gsteps">
           <div class="gstep"><span class="gstep-num">1</span><span class="gstep-text">
-            Install <b>AutoHotkey v1.1</b> — not v2, they're incompatible.
-            <span class="sub">The app detects it automatically and tells you at launch if it's missing.</span>
+            Install <b>AutoHotkey v1.1</b> — not v2.
+            <span class="sub">Velora warns you at launch if it's missing.</span>
           </span></div>
           <div class="gstep"><span class="gstep-num">2</span><span class="gstep-text">
             Set Windows display <b>scale to 100%</b> and a supported resolution.
-            <span class="sub">Right-click desktop → Display settings. The macro clicks exact pixels, so both are checked before every run.</span>
+            <span class="sub">Right-click desktop → Display settings. Both are checked before every run.</span>
           </span></div>
           <div class="gstep"><span class="gstep-num">3</span><span class="gstep-text">
-            Pick your map &amp; mode, then hit <b>Play</b> (or press <span class="kbd">F1</span>).
-            <span class="sub">Roblox launches into a private server and the macro takes over — no setup inside the game needed.</span>
-          </span></div>
-          <div class="gstep"><span class="gstep-num">4</span><span class="gstep-text">
-            Walk away. The macro places heroes, upgrades them, and loops rounds until you stop it.
-            <span class="sub">A floating overlay shows live Mana / Rounds / Coins / XP while it runs.</span>
+            Pick a map, press <b>Play</b> (<span class="kbd">F1</span>), and walk away.
+            <span class="sub">Everything after this is automatic. The overlay shows live Mana / Rounds / Coins / XP.</span>
           </span></div>
         </div>
+
+        <div class="callout warn"><span class="ico">⚠️</span><span>
+          While it runs, <b>don't move the mouse or type</b> — it clicks real pixels. Keep Roblox fullscreen on your main monitor, and press <b>F3</b> to take back control.
+        </span></div>
 
         <h4 class="guide-h">Hotkeys</h4>
         <div class="kbd-grid">
@@ -889,16 +878,10 @@
         <h4 class="guide-h">Requirements</h4>
         <div class="chip-row">
           <span class="chip"><span class="cdot"></span>AutoHotkey v1.1</span>
-          <span class="chip"><span class="cdot"></span>100% display scale</span>
+          <span class="chip"><span class="cdot"></span>100% scale</span>
           <span class="chip"><span class="cdot"></span>1920×1080</span>
           <span class="chip"><span class="cdot"></span>2560×1440</span>
-          <span class="chip"><span class="cdot"></span>3840×2160</span>
         </div>
-
-        <div class="callout warn"><span class="ico">⚠️</span><span>
-          While the macro runs, <b>don't move the mouse or type</b> — it's clicking real pixels on your screen.
-          Keep Roblox fullscreen on your main monitor. Press <b>F3</b> any time to take back control.
-        </span></div>
 
         <h4 class="guide-h">Links</h4>
         <div class="chip-row">
@@ -907,90 +890,43 @@
         </div>
       </div>
 
-      <div id="gtab-how" class="guide-tabpane">
-        <div class="flow">
-          <div class="flow-item">
-            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
-            <span><span class="flow-title">Launch &amp; lobby</span>
-            <span class="flow-desc">Opens a private server, waits for Roblox to go fullscreen, clicks through the lobby and readies up.</span></span>
-          </div>
-          <div class="flow-item">
-            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
-            <span><span class="flow-title">Gather mana</span>
-            <span class="flow-desc">Collects mana for ~30 seconds and lines up the camera before placing anything.</span></span>
-          </div>
-          <div class="flow-item">
-            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
-            <span><span class="flow-title">Place heroes</span>
-            <span class="flow-desc">Places the map's hero loadout, then verifies each hero card shows as placed — retrying only the ones that are missing.</span></span>
-          </div>
-          <div class="flow-item">
-            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
-            <span><span class="flow-title">Upgrade to MAX</span>
-            <span class="flow-desc">Upgrades each hero until its button reads MAX — checked by reading the actual button text off the screen, with a pixel-color fallback.</span></span>
-          </div>
-          <div class="flow-item">
-            <span class="flow-rail"><span class="flow-dot"></span><span class="flow-line"></span></span>
-            <span><span class="flow-title">Finish &amp; loop</span>
-            <span class="flow-desc">Waits for the map-complete screen, reads your coin &amp; XP rewards off the results dialog, returns to the lobby, and starts the next round.</span></span>
-          </div>
-        </div>
-
-        <h4 class="guide-h">Safety nets</h4>
-        <div class="faq">
-          <div class="faq-item">
-            <div class="faq-q"><span class="ico">🔁</span>Auto-recovery</div>
-            <div class="faq-a">If Roblox crashes, disconnects, or a step times out, the macro closes everything and relaunches from scratch on its own.</div>
-          </div>
-          <div class="faq-item">
-            <div class="faq-q"><span class="ico">🛑</span>Restart-loop guard</div>
-            <div class="faq-a">5 restarts in a row without completing a round means something's actually broken — the macro stops itself instead of relaunching Roblox forever. Toggle in Settings → General.</div>
-          </div>
-        </div>
-      </div>
-
       <div id="gtab-discord" class="guide-tabpane">
+        <div class="callout tip"><span class="ico">💡</span><span>
+          Optional: watch a long farm from your phone. Velora posts round results, start/stop, and restart alerts to a Discord channel.
+        </span></div>
         <div class="gsteps">
           <div class="gstep"><span class="gstep-num">1</span><span class="gstep-text">
-            In Discord, open your server and pick a channel for updates.
+            Make a webhook in Discord and copy its URL.
             <span class="sub">Channel settings (⚙) → Integrations → Webhooks → <b>New Webhook</b> → <b>Copy Webhook URL</b>.</span>
           </span></div>
           <div class="gstep"><span class="gstep-num">2</span><span class="gstep-text">
-            Paste the URL in Settings → <b>Discord</b> tab and hit <b>Test</b>.
-            <span class="sub">A green test embed should appear in your channel within a second.</span>
+            Paste it in Settings → <b>Discord</b> and hit <b>Test</b>.
+            <span class="sub">A test message appears in your channel right away. Toggle which events post below the URL — placements and upgrades are off by default (they're chatty).</span>
           </span></div>
           <div class="gstep"><span class="gstep-num">3</span><span class="gstep-text">
-            Pick which events get posted with the toggles below the URL.
-            <span class="sub">Start/stop, round results, restarts &amp; errors are on by default; placements and upgrades are off (they're chatty).</span>
-          </span></div>
-          <div class="gstep"><span class="gstep-num">4</span><span class="gstep-text">
             Optional: add your <b>Discord user ID</b> to get @pinged on critical alerts only.
-            <span class="sub">Discord → Settings → Advanced → Developer Mode on, then right-click your name → Copy User ID. Pings fire for the restart-loop guard and errors — never routine messages.</span>
+            <span class="sub">Turn on Developer Mode in Discord, then right-click your name → Copy User ID. Pings fire for the loop guard and errors — never routine messages.</span>
           </span></div>
         </div>
-        <div class="callout tip"><span class="ico">💡</span><span>
-          Every round you get an embed with round + total coins/XP, mana, elapsed time and restart count —
-          so you can check on a long farm session from your phone without touching the PC.
-        </span></div>
       </div>
 
       <div id="gtab-fixes" class="guide-tabpane">
         <div class="faq">
           <div class="faq-item">
             <div class="faq-q"><span class="ico">🔍</span>Stuck on “Looking for play button”</div>
-            <div class="faq-a">Almost always display settings: Windows scale must be <b>100%</b> and resolution one of the three supported ones. Also make sure Roblox is fullscreen on your <b>main</b> monitor and nothing is covering it.</div>
-          </div>
-          <div class="faq-item">
-            <div class="faq-q"><span class="ico">🪙</span>Coins or XP show 0 / wrong numbers</div>
-            <div class="faq-a">The reward reader scans fixed screen regions. If yours misread, open Settings → <b>Advanced</b>, use the per-region <b>Test</b> buttons with the results screen visible, nudge the boxes, or hit <b>Reset to defaults</b>.</div>
+            <div class="faq-a">Almost always display settings — scale must be <b>100%</b> and the resolution one of the three supported. Keep Roblox fullscreen on your <b>main</b> monitor with nothing covering it.</div>
           </div>
           <div class="faq-item">
             <div class="faq-q"><span class="ico">🔁</span>It keeps restarting Roblox</div>
-            <div class="faq-a">One or two restarts per session is normal recovery (bad server, slow load). Constant restarts usually mean wrong resolution/scale — and after 5 in a row without a finished round, the loop guard stops the macro automatically.</div>
+            <div class="faq-a">A restart or two per session is normal recovery — if Roblox crashes, disconnects, or a step times out, Velora relaunches on its own. Constant restarts usually mean wrong resolution/scale, and after 5 in a row with no finished round the loop guard stops it automatically (toggle in Settings → General).</div>
           </div>
           <div class="faq-item">
-            <div class="faq-q"><span class="ico">🌐</span>A roblox.com browser tab is left open each launch</div>
-            <div class="faq-a">That's how Roblox launches. Turn on <b>Close leftover browser tab</b> in Settings → General and the macro closes it for you once the game is up.</div>
+            <div class="faq-q"><span class="ico">🪙</span>Coins or XP look wrong</div>
+            <div class="faq-a">Rewards are read off the results screen with offline OCR and can occasionally misread a round — it self-corrects on the next one. If it's persistent, send us <b>ocr-debug.log</b> from <b>%APPDATA%\tower-heroes-macro</b>, or open a bug report.</div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q"><span class="ico">🌐</span>A roblox.com tab is left open</div>
+            <div class="faq-a">That's how Roblox launches. Turn on <b>Close leftover browser tab</b> in Settings → General and Velora closes it once the game is up.</div>
           </div>
           <div class="faq-item">
             <div class="faq-q"><span class="ico">⌨️</span>Hotkeys do nothing</div>
@@ -998,7 +934,7 @@
           </div>
           <div class="faq-item">
             <div class="faq-q"><span class="ico">🛑</span>How do I stop it?</div>
-            <div class="faq-a">Press <b>F3</b> anywhere, or click Stop in the app. With <b>Close Roblox on stop</b> enabled (Settings → General), Roblox exits too.</div>
+            <div class="faq-a">Press <b>F3</b> anywhere, or click Stop. With <b>Close Roblox on stop</b> on (Settings → General), Roblox exits too.</div>
           </div>
         </div>
       </div>
@@ -1362,14 +1298,6 @@
     { key: 'stopped', label: 'Macro stopped',
       desc: 'The session summary (rounds, coins, XP) when the macro stops.' }
   ];
-  // Hidden debug calibrator: one row per OCR region (2560x1440 baseline coords).
-  var OCR_REGION_META = [
-    { key: 'coins',   label: 'Coins — "Game Complete" dialog' },
-    { key: 'exp',     label: 'XP — "Game Complete" dialog' },
-    { key: 'rewards', label: 'Reward strip — backup, whole dialog row' },
-    { key: 'mana',    label: 'Live mana — bottom-left HUD' }
-  ];
-  var OCR_DEFAULTS = null; // filled via getOcrDefaults IPC
   var settingsState = {
     closeRobloxOnStop: false, showStatusOverlay: true, overlayAlwaysOnTop: true,
     closeBrowserTab: false, restartLoopGuard: true, launchMethod: 'auto',
@@ -1493,86 +1421,6 @@
     });
   }
 
-  // Debug modal: X/Y/W/H inputs per OCR region + a live "Test" read per row.
-  function ocrRegionValue(key) {
-    var o = settingsState.ocrRegions && settingsState.ocrRegions[key];
-    if (o && isFinite(o.x) && isFinite(o.y) && isFinite(o.w) && isFinite(o.h)) return o;
-    return (OCR_DEFAULTS && OCR_DEFAULTS[key]) || { x: 0, y: 0, w: 0, h: 0 };
-  }
-  function readOcrInputs(key) {
-    var region = {};
-    ['x', 'y', 'w', 'h'].forEach(function(c) {
-      var el = document.getElementById('ocr-' + key + '-' + c);
-      region[c] = el ? parseInt(el.value, 10) : NaN;
-    });
-    return region;
-  }
-  function saveOcrRegions() {
-    var all = {};
-    OCR_REGION_META.forEach(function(meta) { all[meta.key] = readOcrInputs(meta.key); });
-    settingsState.ocrRegions = all;
-    if (window.electronAPI && window.electronAPI.saveSettings) {
-      window.electronAPI.saveSettings(settingsState);
-    }
-  }
-  function renderDebugSettings() {
-    var rows = document.getElementById('debug-rows');
-    if (!rows) return;
-    rows.innerHTML = '';
-    OCR_REGION_META.forEach(function(meta) {
-      var row = document.createElement('div');
-      row.className = 'debug-region';
-
-      var label = document.createElement('div');
-      label.className = 'settings-label';
-      label.textContent = meta.label;
-      row.appendChild(label);
-
-      var inputs = document.createElement('div');
-      inputs.className = 'debug-inputs';
-      var region = ocrRegionValue(meta.key);
-      ['x', 'y', 'w', 'h'].forEach(function(c) {
-        var cl = document.createElement('span');
-        cl.className = 'coord-label';
-        cl.textContent = c.toUpperCase();
-        var inp = document.createElement('input');
-        inp.type = 'number';
-        inp.id = 'ocr-' + meta.key + '-' + c;
-        inp.className = 'webhook-input ocr-num';
-        inp.value = region[c];
-        inp.addEventListener('change', saveOcrRegions);
-        inputs.appendChild(cl);
-        inputs.appendChild(inp);
-      });
-
-      var testBtn = document.createElement('button');
-      testBtn.type = 'button';
-      testBtn.className = 'tool-btn debug-test-btn';
-      testBtn.textContent = 'Test';
-      testBtn.title = 'OCR this region right now (have the game visible on screen)';
-      inputs.appendChild(testBtn);
-      row.appendChild(inputs);
-
-      var result = document.createElement('div');
-      result.className = 'settings-desc debug-result';
-      row.appendChild(result);
-
-      testBtn.addEventListener('click', function() {
-        if (!window.electronAPI || !window.electronAPI.testOcrRegion) return;
-        result.textContent = 'Reading…';
-        window.electronAPI.testOcrRegion(readOcrInputs(meta.key)).then(function(r) {
-          if (r && r.ok) {
-            result.textContent = r.text ? ('Read: "' + r.text + '"') : 'Read: (nothing recognized)';
-          } else {
-            result.textContent = 'Failed: ' + ((r && r.error) || 'unknown error');
-          }
-        }).catch(function() { result.textContent = 'Failed: IPC error'; });
-      });
-
-      rows.appendChild(row);
-    });
-  }
-
   function refreshLifetimeStats() {
     var el = document.getElementById('lifetime-stats');
     if (!el || !window.electronAPI || !window.electronAPI.getLifetimeStats) return;
@@ -1589,7 +1437,7 @@
   function openSettings()  { document.getElementById('settings-overlay').classList.add('open'); refreshLifetimeStats(); }
   function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
 
-  // Tabbed settings: General / Discord / Advanced panes inside one modal.
+  // Tabbed settings: General / Discord panes inside one modal.
   function selectSettingsTab(name) {
     document.querySelectorAll('.settings-tab').forEach(function(t) {
       t.className = 'settings-tab' + (t.dataset.tab === name ? ' active' : '');
@@ -1597,8 +1445,6 @@
     document.querySelectorAll('.settings-tabpane').forEach(function(p) {
       p.className = 'settings-tabpane' + (p.id === 'tab-' + name ? ' active' : '');
     });
-    // Re-render the calibrator on entry so inputs reflect saved values/defaults.
-    if (name === 'advanced') renderDebugSettings();
   }
   // Guide tabs mirror the settings tabs but use their own classes so the two
   // modals' tab logic can never toggle each other's panes.
@@ -1666,21 +1512,6 @@
           : '✗ Failed: ' + ((r && (r.error || ('Discord returned HTTP ' + r.status))) || 'unknown error');
       }).catch(function() { whTestResult.textContent = '✗ Failed: IPC error'; });
     });
-
-    // Advanced tab: OCR calibration reset.
-    var ocrResetBtn = document.getElementById('ocr-reset-btn');
-    if (ocrResetBtn) ocrResetBtn.addEventListener('click', function() {
-      settingsState.ocrRegions = null;
-      if (window.electronAPI && window.electronAPI.saveSettings) {
-        window.electronAPI.saveSettings(settingsState);
-      }
-      renderDebugSettings();
-    });
-    if (window.electronAPI && window.electronAPI.getOcrDefaults) {
-      window.electronAPI.getOcrDefaults().then(function(d) {
-        if (d) OCR_DEFAULTS = d;
-      }).catch(function() {});
-    }
 
     // Discord webhook URL — saved on change (blur/Enter).
     var whInput = document.getElementById('webhook-url');

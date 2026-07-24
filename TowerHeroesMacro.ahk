@@ -93,9 +93,8 @@ if (currentDPI != 96) {
 ; Check resolution is one of the supported options
 supportedRes := (A_ScreenWidth = 2560 && A_ScreenHeight = 1440)
             || (A_ScreenWidth = 1920 && A_ScreenHeight = 1080)
-            || (A_ScreenWidth = 3840 && A_ScreenHeight = 2160)
 if (!supportedRes) {
-    MsgBox, 48, Resolution Error, Your resolution (%A_ScreenWidth%x%A_ScreenHeight%) is not supported.`n`nPlease set your resolution to one of:`n  - 2560x1440`n  - 1920x1080`n  - 3840x2160`n`nThen rerun the macro.
+    MsgBox, 48, Resolution Error, Your resolution (%A_ScreenWidth%x%A_ScreenHeight%) is not supported.`n`nPlease set your resolution to one of:`n  - 2560x1440`n  - 1920x1080`n`nThen rerun the macro.
     ExitApp
 }
 
@@ -1065,6 +1064,10 @@ Loop {
 ;  PLACEMENT SETUP
 ; ============================================================
 
+; Map clock for the 14-minute completion failsafe (Phase 3). Starts here —
+; the moment we're in the match — and resets on every fresh map attempt.
+mapStartTick := A_TickCount
+
 UpdateStatus("Gathering Mana")
 manaStart := A_TickCount
 manaDead  := 0
@@ -1228,9 +1231,9 @@ Loop, %heroCount% {
     s := A_Index
     upName  := slotHero[s]
     upLabel := (upName != "" ? upName : "Hero") . " (slot " . s . ")"
-    ; Kart Kid maxes fastest (180s cap); Slime King needs 210s. Unknown rows
-    ; get the long cap — IsMaxedSmart ends the loop early on a MAX read.
-    upCap := (upName = "Kart Kid") ? 180 : 210
+    ; Failsafe move-on cap: 150s for every hero. IsMaxedSmart ends the loop
+    ; early on a MAX read, so this is just the ceiling if MAX is never seen.
+    upCap := 150
     UpgradeHeroUntilMaxed(upX[s], upY[s], Round(87 * (s - 1) * scaleFactor), 60, upCap, upLabel)
     if (robloxDead)
         Break
@@ -1258,6 +1261,14 @@ consecutiveMatches := 0
 mapDead := 0
 Loop {
     CheckForStop()
+
+    ; 14-minute failsafe: if the map hasn't finished in time, something's stuck
+    ; (missed completion pixel, a wave we can't clear) — restart instead of
+    ; waiting forever. Measured from map start (see mapStartTick above).
+    if (A_TickCount - mapStartTick >= 840000) {
+        UpdateStatus("Map not completed in 14 min — restarting")
+        Goto FullRestart
+    }
 
     ; Auto-rejoin if Roblox drops while we wait for the map to finish.
     if (!RobloxAlive()) {

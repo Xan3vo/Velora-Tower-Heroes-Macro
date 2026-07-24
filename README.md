@@ -57,7 +57,7 @@ It places **Kart Kid + Slime King**, maxes them, wins the round, collects, and l
 4. Launch Velora, pick a map, pick **Easy**, and press **Play** (or `F1`)
 
 > [!IMPORTANT]
-> Velora needs Windows display scale at **100%** and a **2560×1440**, **1920×1080**, or **3840×2160** display. The app checks this on launch and tells you exactly what's off.
+> Velora needs Windows display scale at **100%** and a **2560×1440** or **1920×1080** display. The app checks this on launch and tells you exactly what's off.
 
 Once installed, Velora **updates itself** — when a new version ships, an in-app banner offers it with a one-click download & install. You never have to come back here.
 
