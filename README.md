@@ -83,13 +83,13 @@ Once installed, Velora **updates itself** — when a new version ships, an in-ap
 Hotkeys are global — they work while Roblox has focus.
 
 
-<a name="contributing"><h2>🌎 Community & Contributing</h2></a>
+<a name="community"><h2>💬 Community & Help</h2></a>
 
-Velora is an open-source project and contributions are very welcome!
+Bugs, suggestions, questions — it all happens in our Discord. Come hang out!
 
-- **Bugs**: If you hit an issue or an error while using the macro, please open a [bug report][bug-report-link]. Attaching `ocr-debug.log` from `%APPDATA%\tower-heroes-macro\` helps a lot!
-- **Suggestions**: Got an idea — a new map, hero loadout, or feature? Submit a [suggestion][suggestion-link]!
-- **Code**: PRs are welcome. The engine is plain AutoHotkey v1.1 + an Electron shell — clone, `npm install`, `npm start` and you're developing.
+<a href="https://discord.com/invite/VN3FNPXqea">
+  <img alt="Join the Velora Discord" src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=black">
+</a>
 
 
 <a name="stars"><h2>🌠 Stars</h2></a>
@@ -118,5 +118,3 @@ Velora simulates normal mouse/keyboard input and never modifies, injects into, o
 [license-shield]: https://img.shields.io/badge/license-MIT-blue?labelColor=black
 [license-link]: ./LICENSE
 [ahk-link]: https://www.autohotkey.com/
-[bug-report-link]: https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/issues/new?labels=bug&title=%5BBug%5D%3A+
-[suggestion-link]: https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/issues/new?labels=suggestion&title=%5BSuggestion%5D%3A+
