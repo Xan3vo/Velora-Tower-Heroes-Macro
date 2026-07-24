@@ -98,10 +98,7 @@ If Velora saved you some grinding, let us know by giving it a ⭐ $\color{yellow
 You can do this by clicking the Star button at the top of the page!
 
 <a href="https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/stargazers">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="http://reporoster.com/stars/Xan3vo/Velora-Tower-Heroes-Macro"> <!-- light theme -->
-    <img alt="stargazer-widget" src="http://reporoster.com/stars/dark/Xan3vo/Velora-Tower-Heroes-Macro"> <!-- dark theme -->
-  </picture>
+  <img alt="Star Velora on GitHub" src="https://img.shields.io/github/stars/Xan3vo/Velora-Tower-Heroes-Macro?style=for-the-badge&logo=github&logoColor=white&label=Star%20on%20GitHub&labelColor=black&color=f5b301">
 </a>
 
 <a name="license"><details><summary><h4>📝 License</h4></summary></a>
