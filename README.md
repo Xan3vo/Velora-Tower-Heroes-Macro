@@ -69,7 +69,6 @@ Once installed, Velora **updates itself** — when a new version ships, an in-ap
 - 📊 **Live status overlay** — mana / rounds / coins / XP floating on screen while it runs
 - 🔔 **Discord webhooks** — round-complete embeds, start/stop summaries, restart alerts with optional @you pings; every event toggleable
 - 🧠 **Self-healing** — stuck-state detection, automatic restarts, and a restart-loop guard that stops (and pings you) instead of thrashing all night
-- 🎛️ **OCR calibrator** — Settings → Advanced lets you nudge and live-test every OCR region on your own screen
 
 
 <a name="hotkeys"><h2>⌨️ Hotkeys</h2></a>

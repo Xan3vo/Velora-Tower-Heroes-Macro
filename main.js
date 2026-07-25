@@ -10,7 +10,9 @@ const AHK_WEBSITE_URL = 'https://www.autohotkey.com';
 // (AutoHotkeyU64/U32/A32) are v1-only — v2 ships AutoHotkey64/32 without the
 // letter — so finding one guarantees the correct version. Returns an absolute
 // path, or null if no v1 interpreter can be found.
-function findAhkV1() {
+// Collect every plausible AutoHotkey install directory (registry-recorded +
+// common defaults), de-duplicated. Shared by the v1 and v2 detectors.
+function ahkCandidateDirs() {
   const candidateDirs = [];
 
   // 1. Registry-recorded install dir (covers non-default install locations).
@@ -35,6 +37,17 @@ function findAhkV1() {
   candidateDirs.push(path.join(pfx86, 'AutoHotkey'));
   if (local) candidateDirs.push(path.join(local, 'Programs', 'AutoHotkey'));
 
+  const seen = new Set();
+  return candidateDirs.filter((d) => {
+    if (!d) return false;
+    const key = d.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function findAhkV1() {
   // v1-only interpreter names, checked in both unified-installer (v1\) and
   // classic layouts, most-preferred first (64-bit unicode).
   const v1Exes = [
@@ -42,14 +55,7 @@ function findAhkV1() {
     'AutoHotkeyU64.exe', 'AutoHotkeyU32.exe', 'AutoHotkeyA32.exe',
   ];
 
-  const seen = new Set();
-  const uniqueDirs = candidateDirs.filter((d) => {
-    if (!d) return false;
-    const key = d.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const uniqueDirs = ahkCandidateDirs();
 
   for (const dir of uniqueDirs) {
     for (const exe of v1Exes) {
@@ -67,6 +73,22 @@ function findAhkV1() {
   }
 
   return null;
+}
+
+// Detect a v2-only interpreter (AutoHotkey64/32 — no U/A letter, so unambiguous
+// v2). Used only to give a v2-only user a clearer message: v2 is a different,
+// incompatible language and the macro is written for v1.1. Returns true/false.
+function findAhkV2() {
+  const v2Exes = [
+    'v2\\AutoHotkey64.exe', 'v2\\AutoHotkey32.exe',
+    'AutoHotkey64.exe', 'AutoHotkey32.exe',
+  ];
+  for (const dir of ahkCandidateDirs()) {
+    for (const exe of v2Exes) {
+      if (fs.existsSync(path.join(dir, exe))) return true;
+    }
+  }
+  return false;
 }
 
 let statusWindow = null;
@@ -265,15 +287,25 @@ function createStatusWindow() {
 function resolveAhkOrPrompt(win) {
   const ahkPath = findAhkV1();
   if (ahkPath) return ahkPath;
+  // v1 is missing. If the user has v2 installed, they likely think they're all
+  // set — spell out that v2 is a different, incompatible version.
+  const hasV2 = findAhkV2();
   const choice = dialog.showMessageBoxSync(win, {
     type: 'error',
-    title: 'AutoHotkey 1.1 Required',
-    message: 'AutoHotkey v1.1 was not found on this PC.',
-    detail:
-      'This macro needs AutoHotkey version 1.1 (not v2).\n\n' +
-      'Click "Download AutoHotkey" to get the installer, run it, then try ' +
-      'again. "Visit Website" opens autohotkey.com if you need the docs or ' +
-      'a different version.',
+    title: hasV2 ? 'Wrong AutoHotkey Version' : 'AutoHotkey 1.1 Required',
+    message: hasV2
+      ? 'You have AutoHotkey v2, but this macro needs v1.1.'
+      : 'AutoHotkey v1.1 was not found on this PC.',
+    detail: hasV2
+      ? 'AutoHotkey v2 is a different, incompatible language — this macro is ' +
+        'written for v1.1. Good news: v1.1 installs alongside v2, so you don\'t ' +
+        'have to remove anything.\n\n' +
+        'Click "Download AutoHotkey", choose the v1.1 option during setup, then ' +
+        'try again.'
+      : 'This macro needs AutoHotkey version 1.1 (not v2).\n\n' +
+        'Click "Download AutoHotkey" to get the installer, run it, then try ' +
+        'again. "Visit Website" opens autohotkey.com if you need the docs or ' +
+        'a different version.',
     buttons: ['Download AutoHotkey', 'Visit Website', 'Cancel'],
     defaultId: 0,
     cancelId: 2,
@@ -494,6 +526,20 @@ function parseOcrNumber(text) {
   const m = (text || '').match(/\d[\d.,]*/);
   if (!m) return null;
   const n = parseFloat(m[0].replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+// Coins-specific parse. A round's coin reward realistically never reaches 100
+// (it's a two-digit number), but at higher resolutions the coin icon sits flush
+// against the digits and OCR nondeterministically merges it as a trailing digit
+// ("330" for 33, "211" for 21). So if we ever read 3+ digits, drop the extras
+// and keep the first two — the real value.
+function parseOcrCoins(text) {
+  const m = (text || '').match(/\d[\d.,]*/);
+  if (!m) return null;
+  let digits = m[0].replace(/[.,]/g, '');
+  if (digits.length > 2) digits = digits.slice(0, 2);
+  const n = parseInt(digits, 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -920,7 +966,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   // digits and OCR merges it into the number (live 1080p: "210 9.3" for
   // 21 coins) — a corrupt backfill is worse than a missed one.
   const parseRewards = (coinsText, expText, rewardsText) => {
-    let coins = parseOcrNumber(coinsText);
+    let coins = parseOcrCoins(coinsText);
     let xp = parseOcrXP(expText);
     if (xp === null) {
       const stripXP = (rewardsText || '').match(/(\d[\d.,]*)\s*(?:E\s*X\s*P|EXP|XP)/i);
