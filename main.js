@@ -2,6 +2,7 @@ const { app, BrowserWindow, globalShortcut, ipcMain, dialog, shell } = require('
 const path = require('path');
 const fs = require('fs');
 const { exec, spawn, execSync } = require('child_process');
+const { renderReportChart, postWebhookMultipart, sparkline } = require('./report');
 
 const AHK_DOWNLOAD_URL = 'https://www.autohotkey.com/download/ahk-install.exe';
 const AHK_WEBSITE_URL = 'https://www.autohotkey.com';
@@ -98,6 +99,9 @@ let currentStopFile = null;
 let currentMacroRunningFile = null;
 let currentStatsFile = null;
 let pendingStatusMessages = [];
+// Set on before-quit so shutdown paths skip chart rendering — spinning up a
+// BrowserWindow while the app is tearing down is a good way to crash the exit.
+let appIsQuitting = false;
 
 function sendStatusUpdate(message) {
   const mainWindow = BrowserWindow.getAllWindows().find(win => win !== statusWindow);
@@ -115,8 +119,8 @@ function sendStatusUpdate(message) {
 }
 
 function createWindow() {
-  const iconPath = fs.existsSync(path.join(__dirname, 'logo.png'))
-    ? path.join(__dirname, 'logo.png')
+  const iconPath = fs.existsSync(path.join(__dirname, 'Images', 'logo.png'))
+    ? path.join(__dirname, 'Images', 'logo.png')
     : path.join(__dirname, 'Logo.ico');
 
   const win = new BrowserWindow({
@@ -208,8 +212,8 @@ function createStatusWindow() {
     statusWindow = null;
   }
 
-  const iconPath = fs.existsSync(path.join(__dirname, 'logo.png'))
-    ? path.join(__dirname, 'logo.png')
+  const iconPath = fs.existsSync(path.join(__dirname, 'Images', 'logo.png'))
+    ? path.join(__dirname, 'Images', 'logo.png')
     : path.join(__dirname, 'Logo.ico');
 
   const { screen } = require('electron');
@@ -362,10 +366,13 @@ const SETTINGS_DEFAULTS = {
   restartLoopGuard: true,     // auto-stop after 5 straight restarts with no completed round
   discordWebhookUrl: '',      // Discord webhook for run updates ('' = disabled)
   discordPingUserId: '',      // Discord user ID to @ping on critical alerts ('' = no ping)
+  // Minutes between periodic session reports (0 = off). The report is a digest
+  // with a rendered chart, so per-round messages default off in its favour.
+  reportInterval: 30,
   // Per-event webhook toggles (Webhook settings modal). Key -> send that event.
   webhookEvents: {
     started: true,       // "Macro started"
-    roundComplete: true, // round-complete embed (coins/XP/mana)
+    roundComplete: false, // per-round embed (coins/XP/mana) — the session report covers this
     placements: false,   // hero placed messages
     upgrades: false,     // hero upgrade progress / maxed messages
     restarts: true,      // Roblox restarts / recovery + error details
@@ -387,6 +394,15 @@ function loadSettings() {
     const merged = Object.assign({}, SETTINGS_DEFAULTS, parsed);
     // Deep-merge the nested toggle map so new event keys get their defaults.
     merged.webhookEvents = Object.assign({}, SETTINGS_DEFAULTS.webhookEvents, parsed.webhookEvents || {});
+    // Session reports post on a timer and are gated only by their own interval,
+    // not by webhookEvents. Defaulting that to 30 would silently start a new
+    // notification stream for people who already tuned their webhook — some of
+    // whom deliberately turned everything off. An existing settings file with
+    // no reportInterval key predates the feature, so leave it off and let them
+    // opt in from Settings; only fresh installs get the default cadence.
+    if (!Object.prototype.hasOwnProperty.call(parsed, 'reportInterval')) {
+      merged.reportInterval = 0;
+    }
     return merged;
   } catch (err) {
     return JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
@@ -616,6 +632,61 @@ function postDiscordWebhook(payload, eventKey) {
   });
 }
 
+// Allowed periodic-report intervals, in minutes (0 = off). The renderer's
+// dropdown mirrors this list; anything else falls back to the default.
+const REPORT_INTERVALS = [0, 15, 30, 60];
+const CHART_FILENAME = 'velora-report.png';
+
+// Report glyphs. These are plain unicode, not Discord custom emoji: a custom
+// emoji only renders as `<:name:id>` after someone uploads the art to a guild,
+// and we can't do that on the user's behalf. Swapping in real ones is a
+// one-line change here if a server ever hosts them.
+const MANA_ICON = '✦';      // four-pointed star, matching the in-game mana gem
+const RESTART_ICON = '🗘';   // clockwise/anticlockwise arrows
+const OK_ICON = '✔️';
+
+// Minutes the user picked for session reports, or 0 when they're off.
+function reportIntervalMinutes(settings) {
+  const raw = parseInt((settings || loadSettings()).reportInterval, 10);
+  return REPORT_INTERVALS.indexOf(raw) >= 0 ? raw : SETTINGS_DEFAULTS.reportInterval;
+}
+
+// "1h 12m" / "8m 30s" — used in report embeds and chart captions.
+function formatDuration(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
+}
+
+// Post an embed with the session chart attached. Chart rendering is allowed to
+// fail (headless VM, shutdown) — the message still goes out, with a unicode
+// sparkline standing in for the graph. `eventKey` gates it like any other
+// message; pass null for reports, which are gated by the interval setting.
+function postDiscordWebhookWithChart(payload, eventKey, chartData) {
+  const settings = loadSettings();
+  const url = (settings.discordWebhookUrl || '').trim();
+  if (!url.startsWith('https://')) return Promise.resolve();
+  if (eventKey && settings.webhookEvents && settings.webhookEvents[eventKey] === false) {
+    return Promise.resolve();
+  }
+  const canRender = !appIsQuitting && (chartData.points || []).length >= 2;
+  const chart = canRender ? renderReportChart(chartData) : Promise.resolve(null);
+  return chart.then((buf) => {
+    const embed = payload.embeds[0];
+    if (buf) {
+      embed.image = { url: `attachment://${CHART_FILENAME}` };
+      return postWebhookMultipart(url, payload, { filename: CHART_FILENAME, buffer: buf });
+    }
+    if (chartData.sparkline) {
+      embed.description = `${embed.description || ''}\n\`\`\`\n${chartData.sparkline}\n\`\`\``;
+    }
+    return postWebhookOnce(url, payload);
+  }).then((r) => {
+    if (r && !r.ok) console.error('Report post failed:', r.error || `HTTP ${r.status}`);
+  }).catch((err) => console.error('Report post failed:', err.message));
+}
+
 // "<@id> " mention prefix for critical alerts (restart-loop guard, errors),
 // or '' when no ping user ID is configured. Digits-only sanitize so a pasted
 // "@name" or "<@123>" still works.
@@ -689,6 +760,57 @@ ipcMain.handle('test-webhook', (e, url) => {
     description: 'This webhook is set up correctly!',
     color: 'success',
   }));
+});
+
+// "Preview report" button: posts a session report built from sample data, so
+// the user can see the real embed and chart without sitting through an actual
+// interval. Uses the URL currently in the input, saved or not.
+ipcMain.handle('test-report', async (e, url) => {
+  const target = (url || '').trim();
+  if (!target.startsWith('https://')) {
+    return { ok: false, error: 'URL must start with https://' };
+  }
+  // A plausible half-hour: a round lands every ~6 minutes.
+  const points = [];
+  let coins = 0;
+  let xp = 0;
+  let rounds = 0;
+  for (let m = 0; m <= 30; m++) {
+    if (m > 0 && m % 6 === 0) {
+      rounds += 1;
+      coins += 26 + (m % 3) * 5;
+      xp = Math.round((xp + 9.3) * 10) / 10;
+    }
+    points.push({ t: m * 60, coins, xp, rounds });
+  }
+  const block = (rows) => '```\n' + rows.join('\n') + '\n```';
+  const payload = makeEmbed({
+    title: '📊 Session report (preview)',
+    color: 'info',
+    description: '**Castle Town** · Easy · up for **30m 0s**\n'
+      + `${MANA_ICON} Mana 14,674 · ${RESTART_ICON} 0 restarts · ${OK_ICON} Running normally`,
+    fields: [
+      { name: 'Last 30m', inline: true,
+        value: block([`Rounds  ${rounds}`, `Coins   ${coins}`, `XP      ${xp}`]) },
+      { name: 'Session', inline: true,
+        value: block([`Rounds  ${rounds}`, `Coins   ${coins}`, `XP      ${xp}`]) },
+      { name: 'Pace', inline: true,
+        value: block([`${rounds * 2}/hr rounds`, `${coins * 2}/hr coins`, `${Math.round(xp * 2)}/hr XP`]) },
+    ],
+    footer: `Velora v${app.getVersion()} · sample data · towerheroesmacro.site`,
+  });
+
+  const buf = await renderReportChart({
+    points,
+    subtitle: 'Castle Town · Easy',
+    stamp: `30m · ${rounds} rounds`,
+  });
+  if (buf) {
+    payload.embeds[0].image = { url: `attachment://${CHART_FILENAME}` };
+    return postWebhookMultipart(target, payload, { filename: CHART_FILENAME, buffer: buf });
+  }
+  payload.embeds[0].description += `\n\`\`\`\n${sparkline(points.map((p) => p.coins), 28)}\n\`\`\``;
+  return postWebhookOnce(target, payload);
 });
 
 // Supported physical resolutions (macro coords are calibrated to these).
@@ -903,6 +1025,72 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   // ("Map loaded" / "Gathering Mana"), false once the round ends.
   let inMatch = false;
 
+  // ---- Periodic session report ----------------------------------------------
+  // A digest every N minutes (settings.reportInterval) in place of a live feed
+  // of per-round messages: what moved since the last report, session totals,
+  // pace, and a rendered chart of the run so far.
+  const reportMinutes = reportIntervalMinutes(loadSettings());
+  const REPORT_POINT_CAP = 1500;  // ~25h of one-a-minute samples
+  const reportPoints = [];        // cumulative {t, coins, xp, rounds} samples
+  let reportSeq = 0;
+  let lastReport = { t: 0, rounds: 0, coins: 0, xp: 0 };
+
+  const sampleReportPoint = () => {
+    if (!reportMinutes) return;
+    reportPoints.push({
+      t: Math.floor((Date.now() - runStartTime) / 1000),
+      coins: sessionCoins,
+      xp: sessionXP,
+      rounds: statsRounds,
+    });
+    if (reportPoints.length > REPORT_POINT_CAP) reportPoints.shift();
+  };
+
+  // Chart payload — shared by the periodic report and the closing summary.
+  const buildReportChartData = (elapsedSec) => ({
+    points: reportPoints.slice(),
+    subtitle: `${map} · ${difficulty}`,
+    stamp: `${formatDuration(elapsedSec)} · ${statsRounds} rounds`,
+    sparkline: sparkline(reportPoints.map((p) => p.coins), 28),
+  });
+
+  const sendSessionReport = () => {
+    const elapsed = Math.floor((Date.now() - runStartTime) / 1000);
+    sampleReportPoint();
+    reportSeq += 1;
+
+    const dRounds = statsRounds - lastReport.rounds;
+    const dCoins = sessionCoins - lastReport.coins;
+    const dXP = Math.round((sessionXP - lastReport.xp) * 10) / 10;
+    // Floor the window at a minute so the first report can't divide by ~0 and
+    // report an absurd hourly pace.
+    const windowSec = Math.max(60, elapsed - lastReport.t);
+    const perHour = (v) => Math.round((v / windowSec) * 3600);
+    const block = (rows) => '```\n' + rows.join('\n') + '\n```';
+
+    postDiscordWebhookWithChart(makeEmbed({
+      title: '📊 Session report',
+      color: dRounds > 0 ? 'info' : 'warn',
+      description: [
+        `**${map}** · ${difficulty} · up for **${formatDuration(elapsed)}**`,
+        `${MANA_ICON} Mana ${sessionMana === null ? '—' : sessionMana.toLocaleString()}`
+          + ` · ${RESTART_ICON} ${statsRestarts} restarts`
+          + ` · ${dRounds > 0 ? `${OK_ICON} Running normally` : '⚠️ No rounds this interval'}`,
+      ].join('\n'),
+      fields: [
+        { name: `Last ${reportMinutes}m`, inline: true,
+          value: block([`Rounds  ${dRounds}`, `Coins   ${dCoins}`, `XP      ${dXP}`]) },
+        { name: 'Session', inline: true,
+          value: block([`Rounds  ${statsRounds}`, `Coins   ${sessionCoins}`, `XP      ${sessionXP}`]) },
+        { name: 'Pace', inline: true,
+          value: block([`${perHour(dRounds)}/hr rounds`, `${perHour(dCoins)}/hr coins`, `${perHour(dXP)}/hr XP`]) },
+      ],
+      footer: `Velora v${app.getVersion()} · report #${reportSeq} · towerheroesmacro.site`,
+    }), null, buildReportChartData(elapsed));
+
+    lastReport = { t: elapsed, rounds: statsRounds, coins: sessionCoins, xp: sessionXP };
+  };
+
   const sendRoundWebhook = (roundCoins, roundXP) => {
     const sec = Math.floor((Date.now() - runStartTime) / 1000);
     postDiscordWebhook(makeEmbed({
@@ -994,6 +1182,9 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
       if (coins !== null) sessionCoins += coins;
       if (xp !== null) sessionXP = Math.round((sessionXP + xp) * 10) / 10;
       if (mana !== null) sessionMana = mana;
+      // Pin a chart sample to the round itself, so the step up lands on the
+      // real completion time rather than the next minute tick.
+      sampleReportPoint();
       sendRoundWebhook(coins, xp);
     };
     captureRewardsOnce().then(([coinsText, expText, rewardsText, manaText]) => {
@@ -1121,6 +1312,11 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   };
 
   const statusPoll = setInterval(() => { readStatusFile(); readStatsFile(); }, 300);
+  // Sample once a minute regardless of round pace — a flat line between round
+  // markers is exactly how a stuck macro shows up on the chart.
+  const reportSamplePoll = reportMinutes ? setInterval(sampleReportPoint, 60000) : null;
+  const reportTimer = reportMinutes ? setInterval(sendSessionReport, reportMinutes * 60000) : null;
+  sampleReportPoint();
   readStatusFile();
   readStatsFile();
   console.log('Status polling started for:', statusFile);
@@ -1169,6 +1365,8 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   runningProcess.on('error', (error) => {
     clearInterval(statusPoll);
     clearInterval(manaPoll);
+    clearInterval(reportSamplePoll);
+    clearInterval(reportTimer);
     runningProcess = null;
     currentStatusFile = null;
     currentStopFile = null;
@@ -1196,21 +1394,32 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   runningProcess.on('close', (code, signal) => {
     clearInterval(statusPoll);
     clearInterval(manaPoll);
+    clearInterval(reportSamplePoll);
+    clearInterval(reportTimer);
     const stopSec = Math.floor((Date.now() - runStartTime) / 1000);
     const lifetime = addLifetimeStats({
       rounds: statsRounds, coins: sessionCoins, xp: sessionXP, timeSec: stopSec,
     });
-    postDiscordWebhook(makeEmbed({
+    const stoppedEmbed = makeEmbed({
       title: '⏹ Macro stopped',
+      description: `**${map}** · ${difficulty} · ran for **${formatDuration(stopSec)}**`,
       color: 'neutral',
       fields: [
         { name: 'Rounds', value: String(statsRounds), inline: true },
         { name: 'Coins', value: String(sessionCoins), inline: true },
         { name: 'XP', value: String(sessionXP), inline: true },
-        { name: 'Session time', value: `${Math.floor(stopSec / 60)}m ${stopSec % 60}s`, inline: true },
+        { name: 'Session time', value: formatDuration(stopSec), inline: true },
       ],
       footer: `Lifetime: ${lifetime.rounds} rounds · ${lifetime.coins} coins · ${lifetime.xp} XP · ${lifetime.sessions} sessions`,
-    }), 'stopped');
+    });
+    // With reports enabled the stop message doubles as the final report — same
+    // embed, plus the chart for the whole session.
+    if (reportMinutes) {
+      sampleReportPoint();
+      postDiscordWebhookWithChart(stoppedEmbed, 'stopped', buildReportChartData(stopSec));
+    } else {
+      postDiscordWebhook(stoppedEmbed, 'stopped');
+    }
     runningProcess = null; // Clear the reference when process ends
     currentStatusFile = null;
     currentStopFile = null;
@@ -1269,10 +1478,11 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
 
 // ---- Auto-update (GitHub releases via electron-updater) --------------------
 // Checks shortly after launch and every 4h. Nothing downloads until the user
-// clicks "Update now" in the renderer's toast (autoDownload=false). Once
-// downloaded, "Restart & install" applies it immediately (quitAndInstall —
-// which fires before-quit, so a running macro is stopped first); if the user
-// picks "later", it still installs silently on the next normal quit.
+// clicks "Update now" in the renderer's toast (autoDownload=false). Accepting
+// hands over to the renderer's full-screen update screen, which downloads and
+// then installs SILENTLY and relaunches — no NSIS wizard (see install-update).
+// quitAndInstall fires before-quit, so a running macro is stopped first; if the
+// user picks "later", it still installs silently on the next normal quit.
 let autoUpdater = null;
 try { autoUpdater = require('electron-updater').autoUpdater; } catch (err) { /* optional dep */ }
 
@@ -1307,7 +1517,13 @@ ipcMain.handle('download-update', () => {
 });
 ipcMain.handle('install-update', () => {
   if (!autoUpdater || !app.isPackaged) return false;
-  autoUpdater.quitAndInstall(false, true);
+  // isSilent=true runs the NSIS installer with /S — no setup wizard, the user
+  // just sees our own update screen until the app relaunches itself
+  // (isForceRunAfter=true). Silent is only safe because nsis.perMachine is
+  // false: Velora installs under %LOCALAPPDATA%, so there's no UAC prompt to
+  // answer. Turning on perMachine would need this back to false, or the
+  // install would stall behind an elevation dialog with no window to click.
+  autoUpdater.quitAndInstall(true, true);
   return true;
 });
 ipcMain.handle('get-app-version', () => app.getVersion());
@@ -1333,6 +1549,7 @@ app.whenReady().then(() => {
 // keeps clicking the screen with no way to stop it except Task Manager (and a
 // later relaunch would run two macros at once, fighting over the mouse).
 app.on('before-quit', () => {
+  appIsQuitting = true;
   if (runningProcess) {
     if (currentStopFile) {
       try { fs.writeFileSync(currentStopFile, 'stop', 'utf8'); } catch (err) { /* ignore */ }
