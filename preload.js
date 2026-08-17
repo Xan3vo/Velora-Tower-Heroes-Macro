@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSettings: (settings) => ipcRenderer.send('save-settings', settings),
   launchInspector: () => ipcRenderer.send('launch-inspector'),
   testWebhook: (url) => ipcRenderer.invoke('test-webhook', url),
+  testReport: (url) => ipcRenderer.invoke('test-report', url),
   getLifetimeStats: () => ipcRenderer.invoke('get-lifetime-stats'),
   getOcrDefaults: () => ipcRenderer.invoke('get-ocr-defaults'),
   testOcrRegion: (region) => ipcRenderer.invoke('test-ocr-region', region),

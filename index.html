@@ -772,6 +772,67 @@
     transition: width 0.25s ease;
   }
   #update-stats { margin-top: 5px; font-size: 11px; color: #8a90a0; text-align: right; }
+
+  /* FULL-SCREEN UPDATE SCREEN
+     Takes over once the user opts in, so the update reads as part of Velora
+     instead of handing off to a Windows installer. Sits above everything
+     (intro is 9999) because nothing else should be reachable mid-update. */
+  #update-screen {
+    position: fixed; inset: 0;
+    z-index: 12000;
+    display: none;
+    align-items: center; justify-content: center;
+    background: radial-gradient(120% 120% at 50% 0%, #1a2130 0%, #0e111a 70%);
+  }
+  #update-screen.show { display: flex; }
+  .us-card { width: 100%; max-width: 380px; padding: 0 28px; text-align: center; }
+  .us-logo {
+    width: 76px; height: 76px; object-fit: contain;
+    filter: drop-shadow(0 6px 22px rgba(54,112,242,0.45));
+    animation: us-float 2.8s ease-in-out infinite;
+  }
+  @keyframes us-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+  }
+  .us-title { margin-top: 16px; font-size: 19px; font-weight: 700; color: #e8eaf0; letter-spacing: 0.2px; }
+  .us-versions {
+    margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 9px;
+    font-size: 12px; color: #8a90a0;
+  }
+  .us-pill { background: #232a3c; border: 1px solid #2a2f3e; border-radius: 999px; padding: 3px 10px; }
+  .us-pill.to { background: rgba(54,112,242,0.16); border-color: #3670f2; color: #cdd6ef; }
+  .us-bar {
+    margin-top: 22px; height: 7px; border-radius: 4px;
+    background: #1c2233; overflow: hidden; position: relative;
+  }
+  #us-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #3670f2, #6699ff);
+    border-radius: 4px;
+    transition: width 0.25s ease;
+  }
+  /* Install has no measurable progress — NSIS runs detached and the app is
+     about to exit — so the bar sweeps instead of pretending to know a %. */
+  .us-bar.sweep #us-fill {
+    width: 38%;
+    transition: none;
+    animation: us-sweep 1.1s ease-in-out infinite;
+  }
+  @keyframes us-sweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(365%); }
+  }
+  #us-stats { margin-top: 9px; font-size: 11.5px; color: #8a90a0; min-height: 14px; }
+  #us-note { margin-top: 18px; font-size: 11.5px; color: #6b7280; line-height: 1.5; }
+  #us-close {
+    margin-top: 16px; display: none;
+    border: 1px solid #2a2f3e; background: #232a3c; color: #cdd3e2;
+    border-radius: 7px; padding: 7px 18px;
+    font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  #us-close:hover { color: #e8eaf0; }
+  #us-close.show { display: inline-block; }
   </style>
 </head>
 <body>
@@ -785,7 +846,7 @@
 
 <div id="titlebar">
   <div class="title-left">
-    <img src="logo.png" alt="Logo" class="title-logo" onerror="this.onerror=null;this.src='Logo.ico';" />
+    <img src="Images/logo.png" alt="Logo" class="title-logo" onerror="this.onerror=null;this.src='Logo.ico';" />
     <span>Velora Tower Heroes Macro</span>
   </div>
   <div class="win-controls">
@@ -824,6 +885,19 @@
                placeholder="Discord user ID to @ping (optional)" style="margin-top: 4px;" />
         <div class="settings-desc" style="margin-top: 6px;">You get @pinged on critical alerts only (restart-loop guard, errors). To find your ID: Discord → Settings → Advanced → Developer Mode, then right-click your name → Copy User ID.</div>
       </div>
+
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <span class="settings-label">Session reports</span>
+          <span class="settings-desc">Post a digest on a timer — rounds, coins, XP and pace since the last one, plus a chart of the whole run. Replaces watching a message go by every round.</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center; flex: none;">
+          <select id="report-interval" class="settings-select"></select>
+          <button id="report-preview-btn" class="tool-btn debug-test-btn" type="button" title="Post a sample report so you can see what it looks like">Preview</button>
+        </div>
+      </div>
+      <div id="report-preview-result" class="settings-desc" style="margin: -4px 0 10px; min-height: 14px;"></div>
+
       <div id="webhook-rows"></div>
     </div>
 
@@ -892,7 +966,7 @@
 
       <div id="gtab-discord" class="guide-tabpane">
         <div class="callout tip"><span class="ico">💡</span><span>
-          Optional: watch a long farm from your phone. Velora posts round results, start/stop, and restart alerts to a Discord channel.
+          Optional: watch a long farm from your phone. Velora posts a <b>session report</b> on a timer — rounds, coins, XP, pace and a chart of the run — plus start/stop and restart alerts.
         </span></div>
         <div class="gsteps">
           <div class="gstep"><span class="gstep-num">1</span><span class="gstep-text">
@@ -901,9 +975,13 @@
           </span></div>
           <div class="gstep"><span class="gstep-num">2</span><span class="gstep-text">
             Paste it in Settings → <b>Discord</b> and hit <b>Test</b>.
-            <span class="sub">A test message appears in your channel right away. Toggle which events post below the URL — placements and upgrades are off by default (they're chatty).</span>
+            <span class="sub">A test message appears in your channel right away.</span>
           </span></div>
           <div class="gstep"><span class="gstep-num">3</span><span class="gstep-text">
+            Pick how often you want a <b>session report</b> — every 15 min, 30 min or hour.
+            <span class="sub">Hit <b>Preview</b> to see one straight away with sample data. The chart's dashed line is your coins/hr: if it dives while the blue line goes flat, the run has stalled. Per-round messages are off by default since the report covers them.</span>
+          </span></div>
+          <div class="gstep"><span class="gstep-num">4</span><span class="gstep-text">
             Optional: add your <b>Discord user ID</b> to get @pinged on critical alerts only.
             <span class="sub">Turn on Developer Mode in Discord, then right-click your name → Copy User ID. Pings fire for the loop guard and errors — never routine messages.</span>
           </span></div>
@@ -1014,6 +1092,25 @@
   <div id="update-progress">
     <div class="update-bar"><div id="update-fill"></div></div>
     <div id="update-stats"></div>
+  </div>
+</div>
+
+<!-- Full-screen update takeover: shown once the user accepts an update, and
+     stays up through the silent install until the app relaunches itself. -->
+<div id="update-screen">
+  <div class="us-card">
+    <img class="us-logo" src="Images/logo.png" alt="Velora"
+         onerror="this.onerror=null;this.src='Logo.ico';" />
+    <div class="us-title" id="us-title">Updating Velora</div>
+    <div class="us-versions" id="us-versions">
+      <span class="us-pill" id="us-vfrom"></span>
+      <span>→</span>
+      <span class="us-pill to" id="us-vto"></span>
+    </div>
+    <div class="us-bar" id="us-bar"><div id="us-fill"></div></div>
+    <div id="us-stats"></div>
+    <div id="us-note">Velora will restart on its own when this finishes.</div>
+    <button id="us-close" type="button">Close</button>
   </div>
 </div>
 
@@ -1288,7 +1385,7 @@
     { key: 'started', label: 'Macro started',
       desc: 'A message when the macro launches.' },
     { key: 'roundComplete', label: 'Round complete',
-      desc: 'The results embed after each round: coins, XP, mana, totals.' },
+      desc: 'An embed after every single round: coins, XP, mana, totals. Off by default — session reports above cover this without the spam.' },
     { key: 'placements', label: 'Hero placements',
       desc: 'A message when each hero is placed on the map.' },
     { key: 'upgrades', label: 'Hero upgrades',
@@ -1301,8 +1398,8 @@
   var settingsState = {
     closeRobloxOnStop: false, showStatusOverlay: true, overlayAlwaysOnTop: true,
     closeBrowserTab: false, restartLoopGuard: true, launchMethod: 'auto',
-    discordWebhookUrl: '', discordPingUserId: '',
-    webhookEvents: { started: true, roundComplete: true, placements: false, upgrades: false, restarts: true, stopped: true },
+    discordWebhookUrl: '', discordPingUserId: '', reportInterval: 30,
+    webhookEvents: { started: true, roundComplete: false, placements: false, upgrades: false, restarts: true, stopped: true },
     ocrRegions: null
   };
 
@@ -1523,6 +1620,44 @@
       }
     });
 
+    // Session report interval — a dropdown, not a toggle (mirrors
+    // SETTINGS_DEFAULTS.reportInterval / REPORT_INTERVALS in main.js).
+    var riSelect = document.getElementById('report-interval');
+    if (riSelect) {
+      [['0', 'Off'], ['15', 'Every 15 min'], ['30', 'Every 30 min'], ['60', 'Every hour']]
+        .forEach(function(opt) {
+          var o = document.createElement('option');
+          o.value = opt[0];
+          o.textContent = opt[1];
+          riSelect.appendChild(o);
+        });
+      // Seed from state now so the box matches even if getSettings() fails —
+      // it gets set again once the saved settings land.
+      riSelect.value = String(settingsState.reportInterval);
+      riSelect.addEventListener('change', function() {
+        settingsState.reportInterval = parseInt(riSelect.value, 10) || 0;
+        if (window.electronAPI && window.electronAPI.saveSettings) {
+          window.electronAPI.saveSettings(settingsState);
+        }
+      });
+    }
+
+    // "Preview" — posts a report built from sample data to the URL in the box.
+    var rpBtn = document.getElementById('report-preview-btn');
+    var rpResult = document.getElementById('report-preview-result');
+    if (rpBtn) rpBtn.addEventListener('click', function() {
+      var url = document.getElementById('webhook-url').value.trim();
+      if (!rpResult) return;
+      if (!url) { rpResult.textContent = 'Enter a webhook URL first.'; return; }
+      if (!window.electronAPI || !window.electronAPI.testReport) return;
+      rpResult.textContent = 'Rendering the chart and posting…';
+      window.electronAPI.testReport(url).then(function(r) {
+        rpResult.textContent = (r && r.ok)
+          ? '✓ Sent — check your Discord channel.'
+          : '✗ Failed: ' + ((r && (r.error || ('Discord returned HTTP ' + r.status))) || 'unknown error');
+      }).catch(function() { rpResult.textContent = '✗ Failed: IPC error'; });
+    });
+
     // Ping user ID — digits only, saved on change.
     var pingInput = document.getElementById('webhook-ping-id');
     if (pingInput) pingInput.addEventListener('change', function() {
@@ -1550,6 +1685,7 @@
         renderWebhookSettings();
         if (whInput) whInput.value = settingsState.discordWebhookUrl || '';
         if (pingInput) pingInput.value = settingsState.discordPingUserId || '';
+        if (riSelect) riSelect.value = String(settingsState.reportInterval);
       }).catch(function() { renderSettings(); renderWebhookSettings(); });
     } else {
       renderSettings();
@@ -1591,11 +1727,139 @@
     }, 3200);
   })();
 
-  // ---- Auto-update toast ----------------------------------------------
+  // ---- Auto-update ------------------------------------------------------
   // Driven by update-event messages from the main process (electron-updater).
-  // Flow: available → "Update now" → progress bar → downloaded →
-  // "Restart & install". "Later" just hides the toast; a downloaded update
-  // still installs silently on the next normal quit.
+  // Flow: a toast announces the update; accepting it hands over to the
+  // full-screen updater, which downloads, installs silently (no NSIS wizard —
+  // main.js calls quitAndInstall(true, ...)) and lets the app relaunch itself.
+  // "Later" just hides the toast; the update still installs on the next quit.
+  var usUI = {
+    screen:   document.getElementById('update-screen'),
+    title:    document.getElementById('us-title'),
+    versions: document.getElementById('us-versions'),
+    vfrom:    document.getElementById('us-vfrom'),
+    vto:      document.getElementById('us-vto'),
+    bar:      document.getElementById('us-bar'),
+    fill:     document.getElementById('us-fill'),
+    stats:    document.getElementById('us-stats'),
+    note:     document.getElementById('us-note'),
+    close:    document.getElementById('us-close')
+  };
+  // True once the user opts in — only then does the takeover screen appear.
+  // A background download the user never asked for stays in the toast.
+  var usActive = false;
+
+  // Pacing. electron-updater downloads differentially off the blockmap, so a
+  // small update can finish in well under a second — the bar would snap to
+  // 100% and the app would vanish before anyone read the screen. The fill is
+  // driven by a clock instead: it never runs ahead of the real download, and
+  // never faster than US_FILL_MS either, so the update always reads as a
+  // deliberate step rather than a flicker.
+  var US_FILL_MS = 6000;      // floor on how long the bar takes to fill
+  var US_INSTALL_MS = 2000;   // "Installing…" dwell before the app quits
+  var US_STALL_MS = 45000;    // no progress for this long = offer a way out
+  var usStartedAt = 0;
+  var usRealPct = 0;          // last percent reported by electron-updater
+  var usTransferred = 0;
+  var usTotalBytes = 0;
+  var usSpeed = 0;
+  var usDownloadDone = false;
+  var usInstalling = false;
+  var usTicker = null;
+  var usInstallTimer = null;
+  var usLastProgressAt = 0;
+  var usStalled = false;
+
+  function usStopTicker() {
+    if (usTicker) { clearInterval(usTicker); usTicker = null; }
+  }
+
+  // Let the user out of the takeover screen. Only ever offered before the
+  // install starts — once the app is quitting there's nothing to go back to.
+  function usDismiss() {
+    if (usInstalling) return;
+    usActive = false;
+    usStopTicker();
+    usUI.screen.classList.remove('show');
+  }
+
+  function usTick() {
+    var elapsed = Date.now() - usStartedAt;
+    var clockCap = (elapsed / US_FILL_MS) * 100;
+    // Whichever is further behind wins: a slow download holds the bar back,
+    // and a fast one gets held back by the clock.
+    var shown = Math.min(usDownloadDone ? 100 : usRealPct, clockCap);
+    if (shown > 100) shown = 100;
+    if (shown < 0) shown = 0;
+    usUI.fill.style.width = shown.toFixed(1) + '%';
+
+    var bits = [Math.round(shown) + '%'];
+    if (usTotalBytes) {
+      bits.push(fmtMB(usDownloadDone ? usTotalBytes : usTransferred)
+        + ' / ' + fmtMB(usTotalBytes) + ' MB');
+    }
+    if (usDownloadDone) bits.push('finishing up');
+    else if (usSpeed) bits.push(fmtMB(usSpeed) + ' MB/s');
+    usUI.stats.textContent = bits.join('  ·  ');
+
+    // A download can die without electron-updater ever emitting 'error' (no
+    // download timeout is configured), and this screen covers the titlebar —
+    // so if progress dries up, surface a way out instead of trapping the app.
+    if (!usDownloadDone && !usStalled && Date.now() - usLastProgressAt > US_STALL_MS) {
+      usStalled = true;
+      usUI.note.textContent = 'This is taking longer than expected. You can close '
+        + 'this and keep using Velora — the update will retry later.';
+      usUI.close.classList.add('show');
+    }
+
+    if (usDownloadDone && shown >= 100) usStartInstall();
+  }
+
+  function usStartInstall() {
+    if (usInstalling) return;
+    usInstalling = true;
+    usStopTicker();
+    usUI.title.textContent = 'Installing update…';
+    // Drop the inline width the ticker was writing — it would otherwise beat
+    // the stylesheet and slide a full-width block instead of a 38% chunk.
+    usUI.fill.style.width = '';
+    usUI.bar.classList.add('sweep');
+    usUI.stats.textContent = 'Almost done';
+    usUI.note.textContent = 'Velora is restarting — this takes a few seconds.';
+    usUI.close.classList.remove('show');
+    usInstallTimer = setTimeout(function () {
+      usInstallTimer = null;
+      if (window.electronAPI && window.electronAPI.installUpdate) {
+        window.electronAPI.installUpdate();
+      }
+    }, US_INSTALL_MS);
+  }
+
+  function showUpdateScreen(toVersion) {
+    usActive = true;
+    usStartedAt = Date.now();
+    usRealPct = 0;
+    usTransferred = 0;
+    usTotalBytes = 0;
+    usSpeed = 0;
+    usDownloadDone = false;
+    usInstalling = false;
+    usStalled = false;
+    usLastProgressAt = Date.now();
+    usUI.vfrom.textContent = appVersion ? 'v' + appVersion : 'current';
+    usUI.vto.textContent = toVersion ? 'v' + toVersion : 'latest';
+    usUI.versions.style.display = '';
+    usUI.title.textContent = 'Updating Velora';
+    usUI.bar.classList.remove('sweep');
+    usUI.fill.style.width = '0%';
+    usUI.stats.textContent = 'Starting download…';
+    usUI.note.textContent = 'Velora will restart on its own when this finishes.';
+    usUI.close.classList.remove('show');
+    usUI.screen.classList.add('show');
+    usStopTicker();
+    usTicker = setInterval(usTick, 60);
+  }
+
   var updateUI = {
     toast:    document.getElementById('update-toast'),
     title:    document.getElementById('update-title'),
@@ -1607,7 +1871,8 @@
     stats:    document.getElementById('update-stats')
   };
   var updatePhase = 'idle';   // idle | available | downloading | ready
-  var appVersion = '';
+  var appVersion = '';        // version we're running now
+  var pendingVersion = '';    // version being offered/downloaded
 
   function fmtMB(bytes) { return (bytes / (1024 * 1024)).toFixed(1); }
 
@@ -1615,6 +1880,7 @@
     if (!evt || !evt.type) return;
     if (evt.type === 'available') {
       updatePhase = 'available';
+      pendingVersion = evt.version || pendingVersion;
       updateUI.title.textContent = 'Update available';
       updateUI.sub.textContent = 'Velora v' + evt.version + ' is out' + (appVersion ? ' — you have v' + appVersion : '');
       updateUI.primary.textContent = 'Update now';
@@ -1625,6 +1891,17 @@
     } else if (evt.type === 'progress') {
       updatePhase = 'downloading';
       var pct = Math.max(0, Math.min(100, evt.percent || 0));
+      if (usActive) {
+        // Hand the numbers to the ticker; it owns the bar so the fill stays
+        // paced. The takeover screen also owns the UI now — don't re-raise the
+        // toast behind it, or it reappears if the user closes a failed update.
+        usRealPct = pct;
+        usTransferred = evt.transferred || 0;
+        usTotalBytes = evt.total || usTotalBytes;
+        usSpeed = evt.bytesPerSecond || 0;
+        usLastProgressAt = Date.now();
+        return;
+      }
       updateUI.title.textContent = 'Downloading update…';
       updateUI.sub.textContent = 'The new version is on its way — the app stays usable';
       updateUI.primary.style.display = 'none';
@@ -1638,6 +1915,14 @@
       updateUI.toast.classList.add('show');
     } else if (evt.type === 'downloaded') {
       updatePhase = 'ready';
+      pendingVersion = evt.version || pendingVersion;
+      if (usActive) {
+        // The user already opted in, so don't make them click again. The
+        // ticker finishes filling the bar and rolls into the install itself —
+        // going straight there now is what made the screen flash by.
+        usDownloadDone = true;
+        return;
+      }
       updateUI.title.textContent = 'Update ready 🎉';
       updateUI.sub.textContent = 'Velora v' + evt.version + ' installs when the app restarts';
       updateUI.primary.textContent = 'Restart & install';
@@ -1646,8 +1931,29 @@
       updateUI.progress.classList.remove('show');
       updateUI.toast.classList.add('show');
     } else if (evt.type === 'error') {
-      // Only bother the user if a download was in flight; background update
-      // checks fail quietly (offline, rate limits, ...).
+      // A failure with the takeover screen up can't be ignored — the user is
+      // staring at it and the app is otherwise unreachable behind it.
+      if (usActive) {
+        usActive = false;
+        usStopTicker();
+        // An error landing during the install dwell must cancel the quit —
+        // otherwise the screen says "keep using this version" and the app
+        // exits anyway a moment later.
+        if (usInstallTimer) { clearTimeout(usInstallTimer); usInstallTimer = null; }
+        usInstalling = false;
+        usUI.bar.classList.remove('sweep');
+        usUI.title.textContent = 'Update failed';
+        usUI.versions.style.display = 'none';
+        usUI.bar.classList.remove('sweep');
+        usUI.fill.style.width = '0%';
+        usUI.stats.textContent = evt.message ? String(evt.message).slice(0, 120) : '';
+        usUI.note.textContent = 'Velora will try again later — you can keep using this version.';
+        usUI.close.classList.add('show');
+        updatePhase = 'idle';
+        return;
+      }
+      // Otherwise only bother the user if a download was in flight; background
+      // update checks fail quietly (offline, rate limits, ...).
       if (updatePhase === 'downloading') {
         updateUI.title.textContent = 'Update failed';
         updateUI.sub.textContent = 'Could not download the update — it will retry later';
@@ -1663,14 +1969,29 @@
 
   updateUI.primary.addEventListener('click', function () {
     if (updatePhase === 'available' && window.electronAPI && window.electronAPI.downloadUpdate) {
+      // Hand over to the full-screen updater and drop the toast behind it.
+      updateUI.toast.classList.remove('show');
+      showUpdateScreen(pendingVersion);
       window.electronAPI.downloadUpdate();
       handleUpdateEvent({ type: 'progress', percent: 0, transferred: 0, total: 0 });
     } else if (updatePhase === 'ready' && window.electronAPI && window.electronAPI.installUpdate) {
-      window.electronAPI.installUpdate();
+      // Downloaded in the background ("Later" earlier) — show the screen so
+      // the restart isn't an unexplained window disappearing. Nothing left to
+      // download, so the bar sweeps straight to the install.
+      updateUI.toast.classList.remove('show');
+      showUpdateScreen(pendingVersion);
+      usDownloadDone = true;
+      usStartInstall();
     }
   });
   updateUI.later.addEventListener('click', function () {
     updateUI.toast.classList.remove('show');
+  });
+  usUI.close.addEventListener('click', usDismiss);
+  // The overlay sits over the frameless window's own titlebar buttons, so
+  // Escape is the only way out if a download hangs before the install starts.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && usUI.screen.classList.contains('show')) usDismiss();
   });
 
   if (window.electronAPI && window.electronAPI.onUpdateEvent) {

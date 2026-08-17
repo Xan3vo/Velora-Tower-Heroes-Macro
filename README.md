@@ -67,7 +67,8 @@ Once installed, Velora **updates itself** — when a new version ships, an in-ap
 - 🗺️ **5 maps** on Easy — Castle Town, Radiant Reef, Oddport Academy, Corporate Chaos, Glowing Glacier
 - 🔎 **OCR game-reading** — map tiles, upgrade buttons ("Upgrade All **MAX**"), and end-of-round coins/XP are read with Windows' built-in offline OCR. No installs, no cloud, no client modification
 - 📊 **Live status overlay** — mana / rounds / coins / XP floating on screen while it runs
-- 🔔 **Discord webhooks** — round-complete embeds, start/stop summaries, restart alerts with optional @you pings; every event toggleable
+- 📈 **Scheduled Discord reports** — every 15 min, 30 min or hour, Velora posts a session digest with a rendered chart: rounds, coins, XP and pace since the last one. The chart is drawn locally, so your stats never touch a third-party service
+- 🔔 **Discord webhooks** — start/stop summaries, per-round embeds, restart alerts with optional @you pings; every event toggleable
 - 🧠 **Self-healing** — stuck-state detection, automatic restarts, and a restart-loop guard that stops (and pings you) instead of thrashing all night
 
 
