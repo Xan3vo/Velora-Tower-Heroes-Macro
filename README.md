@@ -42,8 +42,7 @@ The only official sources are:
 [![][license-shield]][license-link]
 <br>
 An open-source *Tower Heroes* macro — Electron UI on an AutoHotkey engine, with OCR game-reading, live stats, and Discord reporting!<br>
-It places **Kart Kid + Slime King**, maxes them, wins the round, collects, and loops — unattended, for hours.
-<br><br>
+
 🌐 **[towerheroesmacro.site][website-link]** — downloads, guides, and a live count of maps Velora has finished.
 
 </div>
