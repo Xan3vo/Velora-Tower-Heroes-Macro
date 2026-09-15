@@ -33,7 +33,7 @@ The only official sources are:
 <img src="Images/logo.png" width="200px" alt="Velora logo">
 <br>
 
-# ⚔️ Velora
+# Velora
 
 <!-- shields -->
 [![][website-shield]][website-link]
