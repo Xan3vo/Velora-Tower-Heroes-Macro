@@ -25,87 +25,52 @@ The only official sources are:
 
 <!-- official source warning -->
 > [!CAUTION]
-> The only official places to download Velora are [towerheroesmacro.site][website-link] and this repository's [Releases page][latest-release-link]. Downloads from anywhere else may be tampered with.
+> Only download Velora from [towerheroesmacro.site][website-link] or this repository's [Releases page][latest-release-link]. Copies from anywhere else may be tampered with.
 
 <div align="center">
 
-<!-- logo banner -->
-<img src="Images/logo.png" width="200px" alt="Velora logo">
-<br>
+<img src="Images/logo.png" width="160px" alt="Velora logo">
 
 # Velora
 
-<!-- shields -->
 [![][website-shield]][website-link]
 [![][latest-release-shield]][latest-release-link]
 [![][downloads-shield]][downloads-link]
 [![][license-shield]][license-link]
-<br>
-An open-source *Tower Heroes* macro — Electron UI on an AutoHotkey engine, with OCR game-reading, live stats, and Discord reporting!<br>
 
-🌐 **[towerheroesmacro.site][website-link]** — downloads, guides, and a live count of maps Velora has finished.
+An open-source macro for the Roblox game *Tower Heroes*.
 
 </div>
 
+## Installation
 
-<a name="installation"><h2>🛠️ Installation</h2></a>
+1. Download the Setup exe from the [latest release][latest-release-link].
+2. Install [AutoHotkey v1.1][ahk-link] (not v2).
+3. Open Velora, pick a map and press **Play**.
 
-1. Download `Tower-Heroes-Macro-Setup-#.#.#.exe` from [towerheroesmacro.site][website-link] or the [latest release][latest-release-link]
-2. Run it — if Windows SmartScreen warns (unsigned installer), click **More info → Run anyway**
-3. Install [AutoHotkey v1.1][ahk-link] *(not v2)* if you don't have it
-4. Launch Velora, pick a map, pick **Easy**, and press **Play** (or `F1`)
+Velora updates itself after that. It needs Windows display scale at 100% and a 1080p, 1440p or 4K screen.
 
-> [!IMPORTANT]
-> Velora needs Windows display scale at **100%** and a **2560×1440** or **1920×1080** display. The app checks this on launch and tells you exactly what's off.
+## Features
 
-Once installed, Velora **updates itself** — when a new version ships, an in-app banner offers it with a one-click download & install. You never have to come back here.
+- Live overlay with your session stats
+- Optional Discord notifications and reports
+- Recovers on its own if Roblox gets stuck
 
-
-<a name="features"><h2>✨ Features</h2></a>
-
-- 🗺️ **5 maps** on Easy — Castle Town, Radiant Reef, Oddport Academy, Corporate Chaos, Glowing Glacier
-- 🔎 **OCR game-reading** — map tiles, upgrade buttons ("Upgrade All **MAX**"), and end-of-round coins/XP are read with Windows' built-in offline OCR. No installs, no cloud, no client modification
-- 📊 **Live status overlay** — mana / rounds / coins / XP floating on screen while it runs
-- 📈 **Scheduled Discord reports** — every 15 min, 30 min or hour, Velora posts a session digest with a rendered chart: rounds, coins, XP and pace since the last one. The chart is drawn locally, so your stats never touch a third-party service
-- 🔔 **Discord webhooks** — start/stop summaries, per-round embeds, restart alerts with optional @you pings; every event toggleable
-- 🧠 **Self-healing** — stuck-state detection, automatic restarts, and a restart-loop guard that stops (and pings you) instead of thrashing all night
-
-
-<a name="hotkeys"><h2>⌨️ Hotkeys</h2></a>
+## Hotkeys
 
 | Key | Action |
 |:---:|---|
-| `F1` | Start the macro |
-| `F3` | Stop the macro |
-| `F4` | Bring the app windows to front |
+| `F1` | Start |
+| `F3` | Stop |
+| `F4` | Show the app |
 
-Hotkeys are global — they work while Roblox has focus.
+## Help
 
+Ask in the [Discord server](https://discord.com/invite/VN3FNPXqea) or open an issue.
 
-<a name="community"><h2>💬 Community & Help</h2></a>
+## License
 
-Bugs, suggestions, questions — it all happens in our Discord. Come hang out!
-
-<a href="https://discord.com/invite/VN3FNPXqea">
-  <img alt="Join the Velora Discord" src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=black">
-</a>
-
-
-<a name="stars"><h2>🌠 Stars</h2></a>
-
-If Velora saved you some grinding, let us know by giving it a ⭐ $\color{yellow}{\textsf{Star}}$ on GitHub!<br>
-You can do this by clicking the Star button at the top of the page!
-
-<a href="https://github.com/Xan3vo/Velora-Tower-Heroes-Macro/stargazers">
-  <img alt="Star Velora on GitHub" src="https://img.shields.io/github/stars/Xan3vo/Velora-Tower-Heroes-Macro?style=for-the-badge&logo=github&logoColor=white&label=Star%20on%20GitHub&labelColor=black&color=f5b301">
-</a>
-
-<a name="license"><details><summary><h4>📝 License</h4></summary></a>
-Copyright © <a href="https://github.com/Xan3vo">Xan3vo</a><br>
-This project is licensed under <a href="./LICENSE">MIT</a>.<br><br>
-Velora simulates normal mouse/keyboard input and never modifies, injects into, or reads the Roblox client.
-
-</details>
+[MIT](./LICENSE) © [Xan3vo](https://github.com/Xan3vo)
 
 <!-- links -->
 [website-shield]: https://img.shields.io/badge/website-towerheroesmacro.site-3670f2?logo=googlechrome&logoColor=white&labelColor=black
