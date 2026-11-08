@@ -20,5 +20,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getWhatsNew: () => ipcRenderer.invoke('get-whats-new'),
   openLink: (key) => ipcRenderer.send('open-link', key),
 });

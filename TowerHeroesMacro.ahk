@@ -3,6 +3,11 @@
 ; without this, an orphaned run (e.g. app closed mid-run) keeps clicking
 ; alongside the new one, fighting over the mouse.
 #SingleInstance force
+; UTF-8 (no BOM) for every FileAppend/FileRead. The v1 default is the ANSI
+; codepage, which wrote the "—" in statuses as byte 0x97; main.js reads the
+; status file as UTF-8, got "�", and the restart webhook's "— restarting"
+; pattern never matched — those restarts were never posted (found 2026-11-08).
+FileEncoding, UTF-8-RAW
 
 ; ============================================================
 ;  FILE PATHS
@@ -64,6 +69,19 @@ if (argsCount >= 7 && A_Args[7] = "browser")
 ; once the deep link has failed twice, every later restart goes straight to
 ; the browser instead of burning 40s rediscovering the same failure.
 deeplinkFails := 0
+; True from a deep-link launch that opened a client window until the Play
+; button shows up. A window alone isn't a successful join: the client can open
+; and then sit on a loading screen or a join error. Before this flag that case
+; counted as success, the Play-button timeout restarted, and the next launch
+; was the deep link AGAIN — forever, never reaching the browser fallback
+; (user-reported 2026-11-08). Now that timeout counts as a deep-link failure.
+pendingDeeplinkJoin := false
+
+; Arg 8: slow mode ("2" = on). Doubles every UI/load wait (SleepWithStop) and
+; the load timeouts (fullscreen, play/ready button, map load, map-list search)
+; for low-end PCs where the game can't keep up. Game-time durations (mana
+; gather, upgrade caps, the 14-min map failsafe) are unchanged.
+slowMult := (argsCount >= 8 && A_Args[8] = "2") ? 2 : 1
 
 ; ============================================================
 ;  SCALE FACTOR
@@ -161,7 +179,13 @@ CheckForStop() {
     }
 }
 
+; Every UI/load wait goes through here so slow mode can stretch it. slowMult
+; (arg 8) is 2 in slow mode, else 1. Deliberately left as raw Sleep (NOT
+; scaled): the upgrade click cadence, the 30s mana gather and the Phase 3
+; completion poll — those are game-time, not "is this PC done loading" time.
 SleepWithStop(ms) {
+    global slowMult
+    ms        := ms * slowMult
     interval  := 1000
     loops     := Floor(ms / interval)
     remainder := ms - (loops * interval)
@@ -194,11 +218,11 @@ CloseLeftoverBrowserTab() {
         WinGet, hwnd, ID, Roblox ahk_exe %exe%
         if (hwnd) {
             WinActivate, ahk_id %hwnd%
-            Sleep, 500
+            SleepWithStop(500)
             WinGetTitle, activeTitle, A
             if (WinActive("ahk_id " . hwnd) && InStr(activeTitle, "Roblox")) {
                 Send, ^w
-                Sleep, 400
+                SleepWithStop(400)
                 UpdateStatus("Closed leftover browser tab")
             }
             Break
@@ -207,7 +231,7 @@ CloseLeftoverBrowserTab() {
     SetTitleMatchMode, %prevMatchMode%
     ; Hand focus back to the Roblox client before the macro continues.
     WinActivate, ahk_exe RobloxPlayerBeta.exe
-    Sleep, 500
+    SleepWithStop(500)
 }
 
 ; ============================================================
@@ -270,12 +294,12 @@ CloseRobloxWindows() {
         winId := robloxWins%A_Index%
         WinClose, ahk_id %winId%
     }
-    Sleep, 2000
+    SleepWithStop(2000)
     ; A hung client (e.g. stuck before the play button) can ignore WM_CLOSE —
     ; force-kill so a relaunch never targets a dead window.
     if (WinExist("ahk_exe RobloxPlayerBeta.exe")) {
         Process, Close, RobloxPlayerBeta.exe
-        Sleep, 1000
+        SleepWithStop(1000)
     }
 }
 
@@ -342,7 +366,7 @@ TestSlimeKingDetection() {
     WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
     if (robloxID) {
         WinActivate, ahk_id %robloxID%
-        Sleep, 500
+        SleepWithStop(500)
     }
     UpdateStatus("Test mode: scanning Slime King slot coordinates")
     tempSlimeSlot := FindSlimeSlot()
@@ -416,7 +440,7 @@ PreparePlacementView() {
     global scaleFactor
     UpdateStatus("Preparing placement")
     WinActivate, ahk_exe RobloxPlayerBeta.exe
-    Sleep, 500
+    SleepWithStop(500)
 
     centerX := Round(A_ScreenWidth  / 2)
     centerY := Round(A_ScreenHeight / 2)
@@ -550,7 +574,7 @@ OcrSelectedMapHeader() {
 ; is unavailable, falls back to fixed clicks for the maps visible without
 ; scrolling. Returns true once the header confirms (or best-effort click).
 SelectMapTile(mapName) {
-    global scaleFactor
+    global scaleFactor, slowMult
     listX     := Round(1114 * scaleFactor)
     firstTop  := 512    ; baseline y of the first tile's top edge
     pitch     := 141    ; baseline distance between tile tops
@@ -570,24 +594,29 @@ SelectMapTile(mapName) {
             return false
         cy := Round(fallbackY * scaleFactor)
         MouseClick, left, %listX%, %cy%
-        Sleep, 800
+        SleepWithStop(800)
         return true
     }
 
-    deadline := A_TickCount + 45000
+    deadline := A_TickCount + 45000 * slowMult
     Loop {
         CheckForStop()
         Loop, %slots% {
             i := A_Index - 1
             txt := (probe != "") ? probe : OcrMapTileTitle(i, firstTop, pitch)
             probe := ""   ; the probe read doubles as slot 0's first read
-            if (txt != "" && InStr(txt, mapName)) {
+            if (MapNameMatch(txt, mapName)) {
                 cy := Round((firstTop + (pitch * i) + 80) * scaleFactor)
                 MouseClick, left, %listX%, %cy%
-                Sleep, 1200
+                SleepWithStop(1200)
                 ; Verify via the left-panel header; a miss = keep searching.
+                ; One re-read first: the panel can still be mid-update.
                 hdr := OcrSelectedMapHeader()
-                if (hdr = "" || InStr(hdr, mapName))
+                if (hdr != "" && !MapNameMatch(hdr, mapName)) {
+                    SleepWithStop(800)
+                    hdr := OcrSelectedMapHeader()
+                }
+                if (hdr = "" || MapNameMatch(hdr, mapName))
                     return true
             }
         }
@@ -601,10 +630,43 @@ SelectMapTile(mapName) {
         MouseMove, %listX%, %hoverY%
         Loop, 4 {
             Send, {WheelDown}
-            Sleep, 150
+            SleepWithStop(150)
         }
-        Sleep, 700
+        SleepWithStop(700)
     }
+}
+
+; True if OCR text txt names mapName, tolerating the misreads Roblox's
+; late-2026 bold UI font causes in Windows OCR. Offline OCR of real lobby
+; screenshots (2026-11-08) gave "Facllltyfrenzy" (Facility Frenzy),
+; "Tidal-Takedown", "Grand w!" (Grand Garage) and, for a SUPPORTED map,
+; "Oddport Acadeni9" — an exact InStr misses all four. Both sides are lowercased, stripped to letters (drops spaces, dashes,
+; digits, "LVL 25+") and i folded into l (OCR swaps i/l/I constantly). If the
+; whole name isn't found, any single word of 6+ letters is enough ("Grand w!"
+; case). Some maps DO share such words (Facility Frenzy / Facility Raid), but
+; the supported maps' long words (castle, radiant, oddport, academy,
+; corporate, glowing, glacier) appear in no other tile title in the lobby
+; screenshots, and the header check after the click still catches a wrong pick.
+; Re-check this if a supported map is added.
+MapNameMatch(txt, mapName) {
+    if (txt = "")
+        return false
+    t := MapNameNorm(txt)
+    if (InStr(t, MapNameNorm(mapName)))
+        return true
+    Loop, Parse, mapName, %A_Space%
+    {
+        w := MapNameNorm(A_LoopField)
+        if (StrLen(w) >= 6 && InStr(t, w))
+            return true
+    }
+    return false
+}
+
+MapNameNorm(s) {
+    StringLower, s, s
+    s := RegExReplace(s, "[^a-z]")
+    return StrReplace(s, "i", "l")
 }
 
 ; OCR the title band of list slot i (0-based, top to bottom).
@@ -632,9 +694,9 @@ RandomPlaceClicks() {
         Random, px, % Round(826 * scaleFactor), % Round(1728 * scaleFactor)
         Random, py, % Round(370 * scaleFactor), % Round(996  * scaleFactor)
         MouseClick, left, %px%, %py%
-        Sleep, 150
+        SleepWithStop(150)
     }
-    Sleep, 1000
+    SleepWithStop(1000)
 }
 
 ; Place a hero by hotkey and confirm via a white card pixel. Leaves the hero
@@ -650,13 +712,13 @@ PlaceHeroByCard(hotkey, label, cardCheckX, cardCheckY, closeHeroX, closeHeroY) {
         UpdateStatus("Placing " label ", attempt " retries)
 
         Send, %hotkey%
-        Sleep, 500
+        SleepWithStop(500)
         RandomPlaceClicks()
 
         Send, %hotkey%   ; deselect
-        Sleep, 500
+        SleepWithStop(500)
         Send, n          ; open hero panel
-        Sleep, 2000
+        SleepWithStop(2000)
 
         PixelGetColor, cardColor, %cardCheckX%, %cardCheckY%, RGB
         if ((cardColor & 0xFFFFFF) = 0xFFFFFF) {
@@ -666,7 +728,7 @@ PlaceHeroByCard(hotkey, label, cardCheckX, cardCheckY, closeHeroX, closeHeroY) {
 
         UpdateStatus(label " not placed, retrying")
         MouseClick, left, %closeHeroX%, %closeHeroY%
-        Sleep, 1000
+        SleepWithStop(1000)
     }
 }
 
@@ -683,13 +745,13 @@ PlaceSlimeKing(closeHeroX, closeHeroY) {
         UpdateStatus("Placing Slime King, attempt " retries)
 
         Send, 2
-        Sleep, 500
+        SleepWithStop(500)
         RandomPlaceClicks()
 
         Send, 2          ; deselect
-        Sleep, 500
+        SleepWithStop(500)
         Send, n          ; open hero panel
-        Sleep, 2000
+        SleepWithStop(2000)
 
         if (FindSlimeSlot() > 0) {
             UpdateStatus("Slime King placed successfully")
@@ -698,7 +760,7 @@ PlaceSlimeKing(closeHeroX, closeHeroY) {
 
         UpdateStatus("Slime King not placed, retrying")
         MouseClick, left, %closeHeroX%, %closeHeroY%
-        Sleep, 1000
+        SleepWithStop(1000)
     }
 }
 
@@ -824,6 +886,7 @@ WriteStats()
 ; Up to 3 attempts in auto mode: deep link, deep link, then the browser URL.
 ; In browser mode the first (browser) attempt failing is fatal, as before.
 usedBrowserLaunch := false
+pendingDeeplinkJoin := false
 robloxID := 0
 Loop, 3 {
     CheckForStop()
@@ -857,11 +920,13 @@ Loop, 3 {
     WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
     if (!robloxID) {
         UpdateStatus("Waiting for Roblox to start")
-        Sleep, 5000
+        SleepWithStop(5000)
         WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
     }
-    if (robloxID)
+    if (robloxID) {
+        pendingDeeplinkJoin := useDeeplink
         Break
+    }
     if (!useDeeplink)
         Break
     deeplinkFails += 1
@@ -874,8 +939,8 @@ if (robloxID) {
     if (usedBrowserLaunch)
         CloseLeftoverBrowserTab()
     WinActivate, ahk_id %robloxID%
-    Sleep, 1000
-    Sleep, 5000
+    SleepWithStop(1000)
+    SleepWithStop(5000)
 } else {
     MsgBox, 48, Roblox Launch Error, Roblox player was not detected. Please ensure Roblox is installed and logged in, then rerun.
     ExitApp
@@ -886,9 +951,9 @@ WinGetPos, X, Y, Width, Height, ahk_id %robloxID%
 if (Width < A_ScreenWidth - 5 || Height < A_ScreenHeight - 5) {
     UpdateStatus("Roblox not fullscreen, attempting fullscreen")
     WinActivate, ahk_exe RobloxPlayerBeta.exe
-    Sleep, 500
+    SleepWithStop(500)
     Send, {F11}
-    Sleep, 2000
+    SleepWithStop(2000)
     startFS := A_TickCount
     Loop {
         CheckForStop()
@@ -898,11 +963,11 @@ if (Width < A_ScreenWidth - 5 || Height < A_ScreenHeight - 5) {
             Break
         }
         elapsedFS := Floor((A_TickCount - startFS) / 1000)
-        if (elapsedFS >= 10) {
+        if (elapsedFS >= 10 * slowMult) {
             UpdateStatus("Fullscreen check timeout, proceeding anyway")
             Break
         }
-        Sleep, 500
+        SleepWithStop(500)
     }
 }
 
@@ -922,7 +987,7 @@ playY2     := playY + scanRadius
 RestartGame:
 WinGet, robloxID, ID, ahk_exe RobloxPlayerBeta.exe
 WinActivate, ahk_id %robloxID%
-Sleep, 500
+SleepWithStop(500)
 
 ; --- Wait for play button ---
 UpdateStatus("Looking for play button")
@@ -934,16 +999,26 @@ Loop {
     PixelSearch, FoundX, FoundY, %playX1%, %playY1%, %playX2%, %playY2%, 0x66DF51, 50, Fast RGB
     if (!ErrorLevel) {
         UpdateStatus("Play button found at " elapsed "s")
+        pendingDeeplinkJoin := false
         Break
     }
-    if (elapsed >= 30) {
-        UpdateStatus("Play button timeout, full restart")
+    if (elapsed >= 30 * slowMult) {
+        if (pendingDeeplinkJoin) {
+            ; The deep link opened Roblox but never got into the game. One
+            ; status line (not two) so main.js's poll can't miss the one the
+            ; restart webhook keys on (", full restart" suffix).
+            deeplinkFails += 1
+            pendingDeeplinkJoin := false
+            UpdateStatus(deeplinkFails >= 2 ? "Deep link didn't join twice, full restart" : "Deep link didn't join, full restart")
+        } else {
+            UpdateStatus("Play button timeout, full restart")
+        }
         Goto FullRestart
     }
-    Sleep, 1000
+    SleepWithStop(1000)
 }
 
-Sleep, 500
+SleepWithStop(500)
 UpdateStatus("Game loaded — checking auto-skip")
 CheckAutoSkip()
 SleepWithStop(3000)
@@ -955,7 +1030,7 @@ SleepWithStop(3000)
 ; routes to FullRestart.
 UpdateStatus("Starting Game")
 WinActivate, ahk_exe RobloxPlayerBeta.exe
-Sleep, 500
+SleepWithStop(500)
 
 ; --- Lobby clicks ---
 x1 := Round(80  * scaleFactor) , y1 := Round(813  * scaleFactor)
@@ -965,13 +1040,13 @@ x4 := Round(427 * scaleFactor) , y4 := Round(541  * scaleFactor)
 x5 := Round(327 * scaleFactor) , y5 := Round(1131 * scaleFactor)
 
 MouseClick, left, %x1%, %y1%
-Sleep, 1000
+SleepWithStop(1000)
 CheckForStop()
 MouseClick, left, %x2%, %y2%
-Sleep, 1000
+SleepWithStop(1000)
 CheckForStop()
 MouseClick, left, %x3%, %y3%
-Sleep, 1000
+SleepWithStop(1000)
 CheckForStop()
 
 ; --- Map selection ---
@@ -983,7 +1058,7 @@ if (selectedMap != "Castle Town") {
     mapsTabX := Round(1119 * scaleFactor)
     mapsTabY := Round(349  * scaleFactor)
     MouseClick, left, %mapsTabX%, %mapsTabY%
-    Sleep, 1000
+    SleepWithStop(1000)
     CheckForStop()
     ; Oddport Academy is a SPECIAL map: its tile lives behind an extra
     ; special-maps button (logged with PixelInspector at 1440p) that must be
@@ -992,7 +1067,7 @@ if (selectedMap != "Castle Town") {
         specialX := Round(1106 * scaleFactor)
         specialY := Round(451  * scaleFactor)
         MouseClick, left, %specialX%, %specialY%
-        Sleep, 1000
+        SleepWithStop(1000)
         CheckForStop()
     }
     if (!SelectMapTile(selectedMap)) {
@@ -1000,15 +1075,15 @@ if (selectedMap != "Castle Town") {
         Goto FullRestart
     }
     UpdateStatus("Map selected: " . selectedMap)
-    Sleep, 1000
+    SleepWithStop(1000)
     CheckForStop()
 }
 
 MouseClick, left, %x4%, %y4%
-Sleep, 1000
+SleepWithStop(1000)
 CheckForStop()
 MouseClick, left, %x5%, %y5%
-Sleep, 1000
+SleepWithStop(1000)
 SleepWithStop(10000)
 
 ; --- Wait for ready button ---
@@ -1032,7 +1107,7 @@ Loop {
     PixelSearch, FoundX2, FoundY2, %readyX1%, %readyY1%, %readyX2%, %readyY2%, 0x66DF51, 50, Fast RGB
     if (!ErrorLevel) {
         UpdateStatus("Ready button found at " elapsed2 "s")
-        Sleep, 2000
+        SleepWithStop(2000)
         MouseClick, left, %readyX%, %readyY%
 
         ; Wait for map to load
@@ -1045,19 +1120,19 @@ Loop {
                 Break
             }
             elapsedMap := Floor((A_TickCount - startMap) / 1000)
-            if (elapsedMap >= 30) {
+            if (elapsedMap >= 30 * slowMult) {
                 UpdateStatus("Map load timeout")
                 Break
             }
-            Sleep, 1000
+            SleepWithStop(1000)
         }
         Break
     }
-    if (elapsed2 >= 30) {
+    if (elapsed2 >= 30 * slowMult) {
         UpdateStatus("Ready button timeout, full restart")
         Goto FullRestart
     }
-    Sleep, 1000
+    SleepWithStop(1000)
 }
 
 ; ============================================================
@@ -1099,6 +1174,12 @@ closeHeroY := Round(320  * scaleFactor)
 ;  A slot reading its logged "used up" color means that hero is placed;
 ;  all used up = the full loadout is on the field.
 ;  Card-slot coords + "placed" colors were captured with PixelInspector.
+;
+;  The grey cards fill top-down in PLACEMENT order, not loadout order: with
+;  Kart Kid + Oddport down and Slime King missing, cards 1-2 are grey and
+;  card 3 is empty. So the cards tell us HOW MANY heroes are placed, never
+;  WHICH. A retry therefore runs every hero again; a placed hero's key is a
+;  no-op in game (its card is used up), so re-sending it is harmless.
 ; ============================================================
 
 ; A placed hero greys its card slot out (~0x575857). An EMPTY slot is
@@ -1111,7 +1192,6 @@ CARD_TOL  := 24                        ; per-channel color tolerance
 cardX := [Round(1872 * scaleFactor), Round(1870 * scaleFactor), Round(1870 * scaleFactor)]
 cardY := [Round(422  * scaleFactor), Round(516  * scaleFactor), Round(610  * scaleFactor)]
 
-placed := [false, false, false]
 placeAttempts    := 0
 maxPlaceAttempts := 10
 
@@ -1123,52 +1203,58 @@ Loop {
     }
     placeAttempts += 1
 
-    ; Run the placement sequence for whichever heroes aren't confirmed yet.
-    lastKey := heroCount
+    ; Run the placement sequence for every hero. First attempt: nothing is
+    ; placed yet, so each key press just switches the selection and one
+    ; deselect of the last key at the end is enough. Retries: some heroes are
+    ; already down (their keys are no-ops), so a failed hero could be left in
+    ; hand with no later key press to clear it. Deselect after EACH hero
+    ; instead (a no-op if it got placed or was already down).
     Loop, %heroCount% {
         heroIdx := A_Index
-        if (!placed[heroIdx]) {
-            heroName := heroNames[heroIdx]
-            UpdateStatus("Placing " . heroName . " (attempt " . placeAttempts . ")")
-            Send, %heroIdx%
-            Sleep, 500
-            RandomPlaceClicks()
-            lastKey := heroIdx
+        heroName := heroNames[heroIdx]
+        UpdateStatus("Placing " . heroName . " (attempt " . placeAttempts . ")")
+        Send, %heroIdx%
+        SleepWithStop(500)
+        RandomPlaceClicks()
+        if (placeAttempts > 1) {
+            Send, %heroIdx%   ; deselect if this hero is still in hand
+            SleepWithStop(300)
         }
     }
 
-    ; Deselect the last hero attempted (pressing an already-placed hero's key
-    ; is a no-op — its card is used up), then open the menu to confirm.
-    Send, %lastKey%
-    Sleep, 300
+    if (placeAttempts = 1) {
+        Send, %heroCount%   ; deselect the last hero
+        SleepWithStop(300)
+    }
     Send, n
-    Sleep, 2000
+    SleepWithStop(2000)
 
     ; Scan a short vertical strip around each logged point so a few px of drift
     ; still catches the grey trim of a filled card. Log the center colors seen
     ; so the references can be tuned if needed.
-    allPlaced := true
-    cardLog   := ""
+    placedCount := 0
+    cardLog     := ""
     Loop, %heroCount% {
-        heroIdx := A_Index
-        placed[heroIdx] := SlotFilledGrey(cardX[heroIdx], cardY[heroIdx], CARD_GREY, CARD_TOL)
-        if (!placed[heroIdx])
-            allPlaced := false
-        px := cardX[heroIdx], py := cardY[heroIdx]
+        cardIdx := A_Index
+        cardFilled := SlotFilledGrey(cardX[cardIdx], cardY[cardIdx], CARD_GREY, CARD_TOL)
+        if (cardFilled)
+            placedCount += 1
+        px := cardX[cardIdx], py := cardY[cardIdx]
         PixelGetColor, cardC, %px%, %py%, RGB
-        cardLog .= (heroIdx > 1 ? ", " : "") . "s" . heroIdx . " " . Format("0x{:06X}", cardC & 0xFFFFFF)
-                 . " (" . (placed[heroIdx] ? "placed" : "empty") . ")"
+        cardLog .= (cardIdx > 1 ? ", " : "") . "card " . cardIdx . " " . Format("0x{:06X}", cardC & 0xFFFFFF)
+                 . " (" . (cardFilled ? "filled" : "empty") . ")"
     }
     UpdateStatus("Cards: " . cardLog)
 
-    if (allPlaced) {
+    if (placedCount >= heroCount) {
         UpdateStatus("All heroes placed")
         Break
     }
+    UpdateStatus(placedCount . "/" . heroCount . " heroes placed, retrying all")
 
     ; Close the menu before retrying the placement sequence.
     MouseClick, left, %closeHeroX%, %closeHeroY%
-    Sleep, 1000
+    SleepWithStop(1000)
 }
 
 ; ============================================================
@@ -1248,7 +1334,7 @@ if (robloxDead)
 ; ============================================================
 
 MouseClick, left, %closeHeroX%, %closeHeroY%
-Sleep, 500
+SleepWithStop(500)
 UpdateStatus("Waiting for map completion")
 SleepWithStop(10000)
 
@@ -1301,10 +1387,13 @@ WriteStats()
 
 ; Hold the "Game Complete" dialog briefly so the app can OCR the coins/XP
 ; rewards off it (main.js triggers the capture on the "Map completed" status).
-SleepWithStop(4000)
+; 5s (was 4s): the reward read now captures, paints out the coin icon and
+; re-OCRs the strip, ~2-3s per pass, so 4s left no room for the retry pass.
+; The same hold covers the "Game Over" dialog on a lost round.
+SleepWithStop(5000)
 
 MouseClick, left, %returnX%, %returnY%
-Sleep, 5000
+SleepWithStop(5000)
 Goto RestartGame
 
 ; ============================================================
@@ -1314,5 +1403,5 @@ Goto RestartGame
 FileDelete, %macroRunningFile%
 Loop {
     CheckForStop()
-    Sleep, 1000
+    SleepWithStop(1000)
 }

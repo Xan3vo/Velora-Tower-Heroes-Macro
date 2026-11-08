@@ -612,6 +612,24 @@
   }
   .guide-h:first-child { margin-top: 2px; }
 
+  /* Update notes — Guide → Updates and the post-update popup share these. */
+  .cl-entry { padding: 10px 12px; background: #1a2030; border: 1px solid #242c40; border-radius: 9px; margin-bottom: 8px; }
+  .cl-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .cl-ver { font-size: 12px; font-weight: 700; color: #fff; background: #24304d; border: 1px solid #2f3d63; border-radius: 6px; padding: 1px 7px; }
+  .cl-date { font-size: 11px; color: #6f7790; }
+  .cl-cur { font-size: 10.5px; font-weight: 600; color: #8fb3ff; margin-left: auto; }
+  .cl-list { margin: 0; padding-left: 17px; }
+  .cl-list li { font-size: 12.5px; line-height: 1.5; color: #b9c0d4; margin: 3px 0; }
+  .whatsnew-card { width: 440px; }
+  .whatsnew-body { max-height: 300px; overflow-y: auto; padding-right: 4px; margin-top: 4px; }
+  .whatsnew-body::-webkit-scrollbar { width: 8px; }
+  .whatsnew-body::-webkit-scrollbar-thumb { background: #2a3247; border-radius: 4px; }
+  .whatsnew-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+  .whatsnew-link { background: none; border: none; color: #8fb3ff; font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
+  .whatsnew-link:hover { text-decoration: underline; }
+  .whatsnew-ok { background: linear-gradient(160deg, #3670f2, #2a52c0); border: none; color: #fff; font: inherit; font-size: 12.5px; font-weight: 600; padding: 8px 18px; border-radius: 8px; cursor: pointer; }
+  .whatsnew-ok:hover { filter: brightness(1.1); }
+
   /* Numbered step cards */
   .gsteps { display: flex; flex-direction: column; gap: 8px; }
   .gstep {
@@ -904,7 +922,22 @@
   </div>
 </div>
 
-<!-- GUIDE MODAL (tabbed: Setup / Discord / Fixes) -->
+<!-- WHAT'S NEW — shown once on the first launch after an update -->
+<div id="whatsnew-overlay" class="settings-overlay">
+  <div class="settings-card whatsnew-card">
+    <div class="settings-header">
+      <span class="settings-title" id="whatsnew-title">What's new</span>
+      <span id="whatsnew-close" class="settings-close-x" title="Close">&times;</span>
+    </div>
+    <div class="whatsnew-body" id="whatsnew-list"></div>
+    <div class="whatsnew-foot">
+      <button class="whatsnew-link" id="whatsnew-all" type="button">All updates</button>
+      <button class="whatsnew-ok" id="whatsnew-ok" type="button">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- GUIDE MODAL (tabbed: Setup / Discord / Fixes / Updates) -->
 <div id="guide-overlay" class="settings-overlay">
   <div class="settings-card guide-card">
     <div class="settings-header">
@@ -915,6 +948,7 @@
       <button class="guide-tab active" type="button" data-gtab="start">Setup</button>
       <button class="guide-tab" type="button" data-gtab="discord">Discord</button>
       <button class="guide-tab" type="button" data-gtab="fixes">Fixes</button>
+      <button class="guide-tab" type="button" data-gtab="updates">Updates</button>
     </div>
     <div class="guide-body">
 
@@ -986,6 +1020,10 @@
             <span class="sub">Turn on Developer Mode in Discord, then right-click your name → Copy User ID. Pings fire for the loop guard and errors — never routine messages.</span>
           </span></div>
         </div>
+      </div>
+
+      <div id="gtab-updates" class="guide-tabpane">
+        <div id="changelog-list"></div>
       </div>
 
       <div id="gtab-fixes" class="guide-tabpane">
@@ -1378,7 +1416,9 @@
     { key: 'closeBrowserTab', label: 'Close leftover browser tab',
       desc: 'After a browser launch, close the roblox.com tab left open in your browser. Only applies when Roblox is launched through the browser.' },
     { key: 'restartLoopGuard', label: 'Restart-loop guard',
-      desc: 'Stop the macro after 5 straight restarts without completing a round (and ping you on Discord, if set below).' }
+      desc: 'Stop the macro after 5 straight restarts without completing a round (and ping you on Discord, if set below).' },
+    { key: 'slowMode', label: 'Slow mode',
+      desc: 'For low-end PCs. Doubles the wait between clicks and gives Roblox twice as long to load before the macro restarts it. Applies on next run.' }
   ];
   // Per-event webhook toggles (mirrors SETTINGS_DEFAULTS.webhookEvents in main.js).
   var WEBHOOK_EVENTS_META = [
@@ -1397,7 +1437,7 @@
   ];
   var settingsState = {
     closeRobloxOnStop: false, showStatusOverlay: true, overlayAlwaysOnTop: true,
-    closeBrowserTab: false, restartLoopGuard: true, launchMethod: 'auto',
+    closeBrowserTab: false, restartLoopGuard: true, slowMode: false, launchMethod: 'auto',
     discordWebhookUrl: '', discordPingUserId: '', reportInterval: 30,
     webhookEvents: { started: true, roundComplete: false, placements: false, upgrades: false, restarts: true, stopped: true },
     ocrRegions: null
@@ -1993,6 +2033,76 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && usUI.screen.classList.contains('show')) usDismiss();
   });
+
+  // ---- Update notes -----------------------------------------------------
+  // changelog.json (via main) fills Guide → Updates; entries this install
+  // hasn't shown yet pop up once after the intro. Window-global so a browser
+  // preview can drive it: showWhatsNew({current, entries, unseen}).
+  function renderChangelog(container, entries, current) {
+    container.innerHTML = '';
+    entries.forEach(function (e) {
+      var box = document.createElement('div');
+      box.className = 'cl-entry';
+      var head = document.createElement('div');
+      head.className = 'cl-head';
+      var ver = document.createElement('span');
+      ver.className = 'cl-ver';
+      ver.textContent = 'v' + e.version;
+      head.appendChild(ver);
+      if (e.date) {
+        var date = document.createElement('span');
+        date.className = 'cl-date';
+        date.textContent = new Date(e.date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        head.appendChild(date);
+      }
+      if (e.version === current) {
+        var cur = document.createElement('span');
+        cur.className = 'cl-cur';
+        cur.textContent = 'Installed';
+        head.appendChild(cur);
+      }
+      var ul = document.createElement('ul');
+      ul.className = 'cl-list';
+      (e.notes || []).forEach(function (n) {
+        var li = document.createElement('li');
+        li.textContent = n;
+        ul.appendChild(li);
+      });
+      box.appendChild(head);
+      box.appendChild(ul);
+      container.appendChild(box);
+    });
+  }
+  var whatsNewUI = {
+    overlay: document.getElementById('whatsnew-overlay'),
+    title: document.getElementById('whatsnew-title'),
+    list: document.getElementById('whatsnew-list'),
+  };
+  function closeWhatsNew() { whatsNewUI.overlay.classList.remove('open'); }
+  window.showWhatsNew = function (data) {
+    renderChangelog(document.getElementById('changelog-list'), data.entries || [], data.current);
+    if (!data.unseen || !data.unseen.length) return;
+    whatsNewUI.title.textContent = data.unseen.length === 1
+      ? "What's new in v" + data.unseen[0].version
+      : "What's new since your last update";
+    renderChangelog(whatsNewUI.list, data.unseen, data.current);
+    // Wait for the intro to finish, and never stack on the updater screen.
+    setTimeout(function () {
+      if (typeof usActive !== 'undefined' && usActive) return;
+      whatsNewUI.overlay.classList.add('open');
+    }, 4100);
+  };
+  document.getElementById('whatsnew-ok').addEventListener('click', closeWhatsNew);
+  document.getElementById('whatsnew-close').addEventListener('click', closeWhatsNew);
+  whatsNewUI.overlay.addEventListener('click', function (e) { if (e.target === whatsNewUI.overlay) closeWhatsNew(); });
+  document.getElementById('whatsnew-all').addEventListener('click', function () {
+    closeWhatsNew();
+    openGuide();
+    selectGuideTab('updates');
+  });
+  if (window.electronAPI && window.electronAPI.getWhatsNew) {
+    window.electronAPI.getWhatsNew().then(window.showWhatsNew).catch(function () {});
+  }
 
   if (window.electronAPI && window.electronAPI.onUpdateEvent) {
     window.electronAPI.onUpdateEvent(handleUpdateEvent);

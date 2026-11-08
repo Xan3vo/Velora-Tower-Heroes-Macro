@@ -1,0 +1,84 @@
+[
+  {
+    "version": "1.6.1",
+    "date": "2026-11-08",
+    "notes": [
+      "Works with Roblox's new UI font. Map selection reads the new map names reliably again, including Oddport Academy.",
+      "Reads coins and XP correctly with the new reward screen, where an event item now sits between them.",
+      "Lost rounds are recognised. They still return to the lobby, and Discord marks them as lost.",
+      "If a hero fails to place, the retry now tries every hero instead of guessing which one is missing.",
+      "If the deep link opens Roblox but never joins, that now counts as a failure, so it switches to the browser launch after two.",
+      "New Slow mode in Settings for low-end PCs. It doubles the waits between steps and gives Roblox longer to load.",
+      "Cleaner Discord messages, and restart alerts that were silently missing now post.",
+      "Update notes like these now show after each update, and live in Guide → Updates."
+    ]
+  },
+  {
+    "version": "1.6.0",
+    "date": "2026-08-17",
+    "notes": [
+      "Discord session reports every 15, 30 or 60 minutes, with a chart of the run.",
+      "Updates install from an in-app screen instead of the setup wizard."
+    ]
+  },
+  {
+    "version": "1.5.1",
+    "date": "2026-07-25",
+    "notes": [
+      "Coin rewards read correctly at every supported resolution.",
+      "Clear message when AutoHotkey v2 is installed instead of v1.1.",
+      "Smaller install."
+    ]
+  },
+  {
+    "version": "1.5.0",
+    "date": "2026-07-24",
+    "notes": [
+      "Upgrade time cap per hero, so a missed MAX check can't stall a run.",
+      "Restarts a map that hasn't finished after 14 minutes.",
+      "Live mana only reads during a match.",
+      "Dropped 4K support. 1440p and 1080p are supported."
+    ]
+  },
+  {
+    "version": "1.4.0",
+    "date": "2026-07-24",
+    "notes": [
+      "Velora has a website, linked from the app.",
+      "Fixed the dead AutoHotkey download link."
+    ]
+  },
+  {
+    "version": "1.3.0",
+    "date": "2026-07-18",
+    "notes": [
+      "Third hero, Oddport, on every map except Castle Town.",
+      "Oddport Academy is picked from the special maps menu.",
+      "Every restart closes Roblox first, so it never relaunches onto a frozen window."
+    ]
+  },
+  {
+    "version": "1.2.0",
+    "date": "2026-07-17",
+    "notes": [
+      "Launches Roblox with a deep link, without opening a browser tab.",
+      "Launch method setting: deep link with browser fallback, or browser only.",
+      "No longer closes your browser window when a Roblox tab is open."
+    ]
+  },
+  {
+    "version": "1.1.0",
+    "date": "2026-07-17",
+    "notes": [
+      "Automatic updates.",
+      "Fixes for 1080p: hero slot order, MAX detection and coin reading."
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-07-16",
+    "notes": [
+      "First public release."
+    ]
+  }
+]

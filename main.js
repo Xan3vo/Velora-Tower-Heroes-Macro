@@ -364,6 +364,7 @@ const SETTINGS_DEFAULTS = {
   // 'browser' = always launch via roblox.com in the default browser.
   launchMethod: 'auto',
   restartLoopGuard: true,     // auto-stop after 5 straight restarts with no completed round
+  slowMode: false,            // low-end PCs: macro doubles its UI/load waits + load timeouts (arg 8)
   discordWebhookUrl: '',      // Discord webhook for run updates ('' = disabled)
   discordPingUserId: '',      // Discord user ID to @ping on critical alerts ('' = no ping)
   // Minutes between periodic session reports (0 = off). The report is a digest
@@ -485,14 +486,23 @@ const OCR_REGION_DEFAULTS = {
   //     Windows OCR flat-out refuses a short bare number alone in the box (a
   //     clean binarized "21" read "" at most scales!), but reads it reliably
   //     when the label fragment above anchors a text line ("Caml 21").
-  // This dialog is only OCR'd on WINS, so the Game Over variant's "You reached
-  // Wave N" (digits!) can't leak into the taller box.
-  exp:   { x: 1300, y: 750, w: 330, h: 130 }, // XP number + "EXP" label (label anchors parseOcrXP)
-  // Whole reward row in one box (coins + XP together). Backup source: the
-  // split boxes can miss a shifted dialog; here XP is found by its "EXP" label
-  // and coins as the first number, wherever they landed inside the strip.
-  rewards: { x: 830, y: 750, w: 850, h: 130 },
+  // NOTE: losses DO reach this OCR — the macro's "Map completed" pixel is the
+  // green difficulty label, which the Game Over dialog has too.
+  // coins/exp are now FALLBACKS only (see readRewardStrip): since late 2026 an
+  // event item (candy) sits between coins and XP and the exp box reads the
+  // candy count ("6" for 5.4 XP). Only a labelled "N EXP" read is taken from it.
+  exp:   { x: 1300, y: 750, w: 330, h: 130 },
+  // PRIMARY source: the whole reward row, measured 2026-11-08 on a real 1080p
+  // Game Over screenshot (new font + candy layout). y 770-870 holds ONLY the
+  // reward numbers — the old 750-880 band caught the bottom of "You reached
+  // Wave 25" above and "game lasted for" below, and OCR turned both into junk
+  // digits. x 800-1800 spans 2- and 3-item rows plus the EXP label. The coin
+  // icon is painted out before OCR (readRewardStrip), so this reads
+  // "38 5.4 EXP" instead of "380 ...".
+  rewards: { x: 800, y: 770, w: 1000, h: 100 },
   mana:  { x: 60,   y: 1300, w: 320, h: 130 }, // bottom-left live mana counter
+  // Dialog title: "Game Over" (lost) vs "Game Complete" (won).
+  title: { x: 900, y: 515, w: 760, h: 90 },
 };
 
 // Effective OCR regions: defaults overlaid with any user overrides from the
@@ -534,6 +544,92 @@ function ocrRegion(region, scale, savePng) {
       resolve('');
     }
   });
+}
+
+// OCR an image file (same engine/preprocessing as ocrRegion, no capture).
+function ocrFile(file) {
+  return new Promise((resolve) => {
+    let out = '';
+    try {
+      const p = spawn('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass',
+        '-File', path.join(__dirname, 'ocr.ps1'), '-File', file,
+      ], { windowsHide: true });
+      p.stdout.on('data', (d) => { out += d.toString(); });
+      p.on('error', () => resolve(''));
+      p.on('close', () => resolve(out.trim()));
+    } catch (err) {
+      resolve('');
+    }
+  });
+}
+
+// Read the reward row from its raw capture with the coin icon painted out.
+// The gold coin sits flush against the coins digits and OCR merges it in as
+// a trailing digit ("380" for 38) — the old fixed-edge coins box chased that
+// for months and broke again with every layout shift. Here we find the icon
+// by COLOUR (gold, column-wise), black out those columns plus a margin for its
+// white rim, and OCR the cleaned strip. Layout-independent: works wherever the
+// icon lands, with or without the event candy. Verified on the real 1080p
+// Game Over capture: raw "380 5.4 EXP" -> cleaned "38 5.4 EXP".
+async function readRewardStrip(pngPath) {
+  try {
+    const { nativeImage } = require('electron');
+    const img = nativeImage.createFromPath(pngPath);
+    if (img.isEmpty()) return '';
+    const { width: W, height: H } = img.getSize();
+    const buf = img.toBitmap();  // BGRA
+    const goldCols = [];
+    for (let x = 0; x < W; x++) {
+      let hits = 0;
+      for (let y = 0; y < H; y++) {
+        const i = (y * W + x) * 4;
+        const b = buf[i], g = buf[i + 1], r = buf[i + 2];
+        if (r > 200 && g > 140 && g < 215 && b < 90) hits++;
+      }
+      if (hits >= 2) goldCols.push(x);
+    }
+    if (goldCols.length) {
+      const a = goldCols[0];
+      const z = goldCols[goldCols.length - 1];
+      const pad = Math.max(3, Math.round((z - a) * 0.15));
+      for (let x = Math.max(0, a - pad); x <= Math.min(W - 1, z + pad); x++) {
+        for (let y = 0; y < H; y++) {
+          const i = (y * W + x) * 4;
+          buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0;
+        }
+      }
+    }
+    const cleanPath = pngPath.replace(/\.png$/i, '-clean.png');
+    fs.writeFileSync(cleanPath, nativeImage.createFromBitmap(buf, { width: W, height: H }).toPNG());
+    return await ocrFile(cleanPath);
+  } catch (err) {
+    return '';
+  }
+}
+
+// Parse the cleaned reward row: "38 5.4 EXP" (or "38 6 5.4 EXP" if the candy
+// count survives). XP = the number before the EXP label, else the LAST
+// number; coins = the FIRST number, as long as it isn't the XP itself.
+function parseRewardStrip(text) {
+  const t = text || '';
+  const nums = (t.match(/\d+(?:[.,]\d+)?/g) || []).map((s) => parseFloat(s.replace(',', '.')));
+  const labeled = t.match(/(\d+(?:[.,]\d+)?)\s*(?:E\s*X\s*P|EXP|XP)/i);
+  let xp = labeled ? parseFloat(labeled[1].replace(',', '.')) : null;
+  if (xp === null && nums.length >= 2) xp = nums[nums.length - 1];
+  let coins = null;
+  if (nums.length >= 2 || (nums.length === 1 && xp === null)) coins = Math.round(nums[0]);
+  if (!Number.isFinite(coins)) coins = null;
+  if (!Number.isFinite(xp)) xp = null;
+  return { coins, xp };
+}
+
+// Round outcome from the dialog title: 'lost' (Game Over / You have died),
+// 'won' (Game Complete), or null if OCR couldn't tell.
+function parseRoundOutcome(text) {
+  if (/over|died/i.test(text || '')) return 'lost';
+  if (/compl|victory|win/i.test(text || '')) return 'won';
+  return null;
 }
 
 // Pull the first number out of OCR text. Keeps decimals ("9.2" XP) and strips
@@ -637,13 +733,49 @@ function postDiscordWebhook(payload, eventKey) {
 const REPORT_INTERVALS = [0, 15, 30, 60];
 const CHART_FILENAME = 'velora-report.png';
 
-// Report glyphs. These are plain unicode, not Discord custom emoji: a custom
-// emoji only renders as `<:name:id>` after someone uploads the art to a guild,
-// and we can't do that on the user's behalf. Swapping in real ones is a
-// one-line change here if a server ever hosts them.
-const MANA_ICON = '✦';      // four-pointed star, matching the in-game mana gem
-const RESTART_ICON = '🗘';   // clockwise/anticlockwise arrows
-const OK_ICON = '✔️';
+// Embed number formatting: thousands separators, at most one decimal (XP is
+// fractional), and an em dash for "no reading" (OCR missed / not sampled yet).
+function fmtNum(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 });
+}
+
+// "3 restarts" / "1 restart".
+function plural(n, word) {
+  return `${fmtNum(n)} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// Monospace label/value block for an embed field, labels padded so the
+// values line up across rows.
+function statBlock(rows) {
+  return '```\n' + rows.map(([k, v]) => `${k.padEnd(7)}${v}`).join('\n') + '\n```';
+}
+
+// The session-report embed, shared by the scheduled report and the Settings
+// "Preview" button so the two can never drift apart. `last`/`session`/`pace`
+// are {rounds, coins, xp}; pace is per hour.
+function buildReportEmbed({ title, map, difficulty, elapsedSec, windowLabel, last, session, pace, mana, restarts, footer }) {
+  const stuck = last.rounds === 0;
+  const lines = [`**${map}** · ${difficulty} · running for ${formatDuration(elapsedSec)}`];
+  if (stuck) lines.push(`No rounds finished in the ${windowLabel.toLowerCase()}. The macro may be stuck.`);
+  else if (last.lost) lines.push(`${plural(last.lost, 'round')} lost in the ${windowLabel.toLowerCase()}.`);
+  return makeEmbed({
+    title,
+    color: stuck ? 'warn' : 'info',
+    description: lines.join('\n'),
+    fields: [
+      { name: windowLabel, inline: true, value: statBlock([
+        ['Rounds', fmtNum(last.rounds)], ['Coins', fmtNum(last.coins)], ['XP', fmtNum(last.xp)]]) },
+      { name: 'Session', inline: true, value: statBlock([
+        ['Rounds', fmtNum(session.rounds)], ['Coins', fmtNum(session.coins)], ['XP', fmtNum(session.xp)]]) },
+      { name: 'Pace', inline: true, value: statBlock([
+        ['Rounds', `${fmtNum(pace.rounds)}/hr`], ['Coins', `${fmtNum(pace.coins)}/hr`], ['XP', `${fmtNum(pace.xp)}/hr`]]) },
+      { name: 'Mana', value: fmtNum(mana), inline: true },
+      { name: 'Restarts', value: fmtNum(restarts), inline: true },
+    ],
+    footer,
+  });
+}
 
 // Minutes the user picked for session reports, or 0 when they're off.
 function reportIntervalMinutes(settings) {
@@ -703,7 +835,10 @@ const WEBHOOK_AVATAR = 'https://raw.githubusercontent.com/Xan3vo/Velora-Tower-He
 
 // Build a one-embed payload. Every webhook message is an embed for a uniform
 // look; `ping` (a "<@id> " prefix or '') goes in `content` because mentions
-// inside embeds render but never actually notify the user.
+// inside embeds render but never actually notify the user. House style: plain
+// sentence-case titles with no emoji (the colour stripe carries the kind),
+// "**Map** · Difficulty" as the context line, numbers through fmtNum, and a
+// footer that always ends in the app version, plus a timestamp.
 const EMBED_COLORS = {
   info: 0x2563eb,     // blue  — rounds, placements
   success: 0x22c55e,  // green — started, test, upgrades/maxed
@@ -712,10 +847,15 @@ const EMBED_COLORS = {
   neutral: 0x64748b,  // grey  — stopped
 };
 function makeEmbed({ title, description, color, fields, footer, ping }) {
-  const embed = { title, color: EMBED_COLORS[color] || EMBED_COLORS.info };
+  const embed = {
+    title,
+    color: EMBED_COLORS[color] || EMBED_COLORS.info,
+    timestamp: new Date().toISOString(),
+  };
   if (description) embed.description = description;
   if (fields) embed.fields = fields;
-  if (footer) embed.footer = { text: footer };
+  const version = `Velora v${app.getVersion()}`;
+  embed.footer = { text: footer ? `${footer} · ${version}` : version };
   const payload = { username: WEBHOOK_NAME, avatar_url: WEBHOOK_AVATAR, embeds: [embed] };
   if (ping) payload.content = ping.trim();
   return payload;
@@ -756,8 +896,8 @@ ipcMain.handle('test-webhook', (e, url) => {
     return { ok: false, error: 'URL must start with https://' };
   }
   return postWebhookOnce(target, makeEmbed({
-    title: '✅ Test message',
-    description: 'This webhook is set up correctly!',
+    title: 'Webhook connected',
+    description: 'Velora will post updates here while the macro runs.',
     color: 'success',
   }));
 });
@@ -783,21 +923,19 @@ ipcMain.handle('test-report', async (e, url) => {
     }
     points.push({ t: m * 60, coins, xp, rounds });
   }
-  const block = (rows) => '```\n' + rows.join('\n') + '\n```';
-  const payload = makeEmbed({
-    title: '📊 Session report (preview)',
-    color: 'info',
-    description: '**Castle Town** · Easy · up for **30m 0s**\n'
-      + `${MANA_ICON} Mana 14,674 · ${RESTART_ICON} 0 restarts · ${OK_ICON} Running normally`,
-    fields: [
-      { name: 'Last 30m', inline: true,
-        value: block([`Rounds  ${rounds}`, `Coins   ${coins}`, `XP      ${xp}`]) },
-      { name: 'Session', inline: true,
-        value: block([`Rounds  ${rounds}`, `Coins   ${coins}`, `XP      ${xp}`]) },
-      { name: 'Pace', inline: true,
-        value: block([`${rounds * 2}/hr rounds`, `${coins * 2}/hr coins`, `${Math.round(xp * 2)}/hr XP`]) },
-    ],
-    footer: `Velora v${app.getVersion()} · sample data · towerheroesmacro.site`,
+  const totals = { rounds, coins, xp };
+  const payload = buildReportEmbed({
+    title: 'Session report (preview)',
+    map: 'Castle Town',
+    difficulty: 'Easy',
+    elapsedSec: 30 * 60,
+    windowLabel: 'Last 30m',
+    last: totals,
+    session: totals,
+    pace: { rounds: rounds * 2, coins: coins * 2, xp: Math.round(xp * 2) },
+    mana: 14674,
+    restarts: 0,
+    footer: 'Sample data',
   });
 
   const buf = await renderReportChart({
@@ -1017,6 +1155,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   // Session reward totals, filled by OCR of the "Game Complete" dialog.
   const ocrScale = display.physW / 2560;
   let sessionCoins = 0;
+  let sessionLosses = 0;    // rounds that ended on the Game Over dialog
   let sessionXP = 0;
   let sessionMana = null;   // latest live-mana read (null until first success)
   // Live-mana OCR only makes sense inside a match — the mana counter isn't on
@@ -1033,7 +1172,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
   const REPORT_POINT_CAP = 1500;  // ~25h of one-a-minute samples
   const reportPoints = [];        // cumulative {t, coins, xp, rounds} samples
   let reportSeq = 0;
-  let lastReport = { t: 0, rounds: 0, coins: 0, xp: 0 };
+  let lastReport = { t: 0, rounds: 0, coins: 0, xp: 0, lost: 0 };
 
   const sampleReportPoint = () => {
     if (!reportMinutes) return;
@@ -1066,73 +1205,92 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
     // report an absurd hourly pace.
     const windowSec = Math.max(60, elapsed - lastReport.t);
     const perHour = (v) => Math.round((v / windowSec) * 3600);
-    const block = (rows) => '```\n' + rows.join('\n') + '\n```';
 
-    postDiscordWebhookWithChart(makeEmbed({
-      title: '📊 Session report',
-      color: dRounds > 0 ? 'info' : 'warn',
-      description: [
-        `**${map}** · ${difficulty} · up for **${formatDuration(elapsed)}**`,
-        `${MANA_ICON} Mana ${sessionMana === null ? '—' : sessionMana.toLocaleString()}`
-          + ` · ${RESTART_ICON} ${statsRestarts} restarts`
-          + ` · ${dRounds > 0 ? `${OK_ICON} Running normally` : '⚠️ No rounds this interval'}`,
-      ].join('\n'),
-      fields: [
-        { name: `Last ${reportMinutes}m`, inline: true,
-          value: block([`Rounds  ${dRounds}`, `Coins   ${dCoins}`, `XP      ${dXP}`]) },
-        { name: 'Session', inline: true,
-          value: block([`Rounds  ${statsRounds}`, `Coins   ${sessionCoins}`, `XP      ${sessionXP}`]) },
-        { name: 'Pace', inline: true,
-          value: block([`${perHour(dRounds)}/hr rounds`, `${perHour(dCoins)}/hr coins`, `${perHour(dXP)}/hr XP`]) },
-      ],
-      footer: `Velora v${app.getVersion()} · report #${reportSeq} · towerheroesmacro.site`,
+    postDiscordWebhookWithChart(buildReportEmbed({
+      title: 'Session report',
+      map,
+      difficulty,
+      elapsedSec: elapsed,
+      windowLabel: `Last ${reportMinutes}m`,
+      last: { rounds: dRounds, coins: dCoins, xp: dXP, lost: sessionLosses - lastReport.lost },
+      session: { rounds: statsRounds, coins: sessionCoins, xp: sessionXP, lost: sessionLosses },
+      pace: { rounds: perHour(dRounds), coins: perHour(dCoins), xp: perHour(dXP) },
+      mana: sessionMana,
+      restarts: statsRestarts,
+      footer: `Report #${reportSeq}`,
     }), null, buildReportChartData(elapsed));
 
-    lastReport = { t: elapsed, rounds: statsRounds, coins: sessionCoins, xp: sessionXP };
+    lastReport = { t: elapsed, rounds: statsRounds, coins: sessionCoins, xp: sessionXP, lost: sessionLosses };
   };
 
-  const sendRoundWebhook = (roundCoins, roundXP) => {
+  const sendRoundWebhook = (roundCoins, roundXP, outcome) => {
     const sec = Math.floor((Date.now() - runStartTime) / 1000);
+    const lost = outcome === 'lost';
     postDiscordWebhook(makeEmbed({
-      title: '🏰 Round complete',
-      color: 'info',
+      title: lost ? `Round ${statsRounds} lost` : `Round ${statsRounds} complete`,
+      color: lost ? 'warn' : 'info',
+      description: `**${map}** · ${difficulty}`
+        + (lost ? '\nThe base fell before the last wave. Rewards were still collected.' : ''),
       fields: [
-        { name: 'Rounds', value: String(statsRounds), inline: true },
-        { name: 'Coins (round)', value: roundCoins === null ? '—' : String(roundCoins), inline: true },
-        { name: 'XP (round)', value: roundXP === null ? '—' : String(roundXP), inline: true },
-        { name: 'Total coins', value: String(sessionCoins), inline: true },
-        { name: 'Total XP', value: String(sessionXP), inline: true },
-        { name: 'Mana', value: sessionMana === null ? '—' : String(sessionMana), inline: true },
+        { name: 'Coins', value: roundCoins === null ? '—' : `+${fmtNum(roundCoins)}`, inline: true },
+        { name: 'XP', value: roundXP === null ? '—' : `+${fmtNum(roundXP)}`, inline: true },
+        { name: 'Mana', value: fmtNum(sessionMana), inline: true },
+        { name: 'Session coins', value: fmtNum(sessionCoins), inline: true },
+        { name: 'Session XP', value: fmtNum(sessionXP), inline: true },
+        { name: 'Running for', value: formatDuration(sec), inline: true },
       ],
-      footer: `Session ${Math.floor(sec / 60)}m ${sec % 60}s · ${statsRestarts} restarts`,
+      footer: statsRestarts ? `${plural(statsRestarts, 'restart')} this session` : null,
     }), 'roundComplete');
   };
 
   // Status-driven webhook events (placement / upgrade / restart messages).
   // Statuses come from the macro's status file; each pattern maps a family of
   // status texts to a per-event toggle in Webhook settings.
+  // Raw macro statuses ("Play button timeout, full restart") are terse log
+  // lines; each match below rewrites one into a readable title + sentence.
+  // NOTE: deliberately not matching the per-tick "Upgrading X (12s)" ticker —
+  // it changes every few seconds and would flood the channel / rate limit.
+  const RESTART_SUFFIX = /[\s,—\-�]*(?:full restart|restarting)$/;
+  const RESTART_REASONS = {
+    'Play button timeout': 'The Play button never appeared.',
+    'Ready button timeout': 'The Ready button never appeared.',
+    'Hero placement failed': "Couldn't place every hero after 10 tries.",
+    "Deep link didn't join": 'Roblox opened but never joined the server. Trying the deep link once more.',
+    "Deep link didn't join twice": 'The deep link failed twice, so Velora is switching to the browser launch.',
+  };
   const sendStatusWebhook = (statusText) => {
+    let m;
     let eventKey = null;
-    let emoji = null;
-    let color = 'info';
-    if (/placed successfully$|^(Both|All) heroes placed$/.test(statusText)) {
-      eventKey = 'placements'; emoji = '🦸';
-    // NOTE: deliberately not matching the per-tick "Upgrading X (12s)" ticker —
-    // it changes every few seconds and would flood the channel / rate limit.
-    } else if (/maxed \(|upgrade cap reached/.test(statusText)) {
-      eventKey = 'upgrades'; emoji = '⬆️'; color = 'success';
-    } else if (/full restart|— restarting/.test(statusText)) {
-      eventKey = 'restarts'; emoji = '🔁'; color = 'warn';
-    }
-    if (!eventKey) return;
-    let footer = null;
-    if (eventKey === 'restarts') {
-      // Restart messages carry session context — the status already says WHY
-      // (which timeout / crash), this adds where the run was when it happened.
+    let embed = null;
+    if ((m = statusText.match(/^(.+) placed successfully$/))) {
+      eventKey = 'placements';
+      embed = { title: `${m[1]} placed`, color: 'info' };
+    } else if (/^(Both|All) heroes placed$/.test(statusText)) {
+      eventKey = 'placements';
+      embed = { title: 'All heroes placed', color: 'info', description: 'Moving on to upgrades.' };
+    } else if ((m = statusText.match(/^(.+) maxed \((\d+)s\)$/))) {
+      eventKey = 'upgrades';
+      embed = { title: `${m[1]} maxed`, color: 'success',
+        description: `Fully upgraded in ${formatDuration(Number(m[2]))}.` };
+    } else if ((m = statusText.match(/^(.+) upgrade cap reached \((\d+)s\)$/))) {
+      eventKey = 'upgrades';
+      embed = { title: `${m[1]} hit the upgrade time limit`, color: 'warn',
+        description: `Stopped upgrading after ${formatDuration(Number(m[2]))}. It may not be fully maxed.` };
+    } else if (RESTART_SUFFIX.test(statusText)) {
+      // The status says WHY (which timeout / crash); the fields add where the
+      // run was when it happened.
+      const raw = statusText.replace(RESTART_SUFFIX, '').trim();
+      const reason = RESTART_REASONS[raw] || `${raw.charAt(0).toUpperCase()}${raw.slice(1)}.`;
       const sec = Math.floor((Date.now() - runStartTime) / 1000);
-      footer = `Round ${statsRounds} · ${Math.floor(sec / 60)}m ${sec % 60}s in · ${statsRestarts} restarts so far`;
+      eventKey = 'restarts';
+      embed = { title: 'Restarting Roblox', color: 'warn', description: reason,
+        fields: [
+          { name: 'Rounds done', value: fmtNum(statsRounds), inline: true },
+          { name: 'Running for', value: formatDuration(sec), inline: true },
+          { name: 'Earlier restarts', value: fmtNum(statsRestarts), inline: true },
+        ] };
     }
-    postDiscordWebhook(makeEmbed({ title: `${emoji} ${statusText}`, color, footer }), eventKey);
+    if (eventKey) postDiscordWebhook(makeEmbed(embed), eventKey);
   };
 
   const captureRewardsOnce = () => {
@@ -1141,69 +1299,64 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
     // recalibrated offline from the real pixels — see userData\ocr-captures.
     const capDir = path.join(app.getPath('userData'), 'ocr-captures');
     try { fs.mkdirSync(capDir, { recursive: true }); } catch (err) { /* capture is best-effort */ }
+    const stripPng = path.join(capDir, 'rewards-last.png');
     return Promise.all([
       ocrRegion(R.coins, ocrScale, path.join(capDir, 'coins-last.png')),
       ocrRegion(R.exp, ocrScale, path.join(capDir, 'exp-last.png')),
-      ocrRegion(R.rewards, ocrScale, path.join(capDir, 'rewards-last.png')),
+      // The strip's own OCR text is unused — what matters is the saved PNG,
+      // re-read with the coin icon painted out.
+      ocrRegion(R.rewards, ocrScale, stripPng).then(() => readRewardStrip(stripPng)),
       ocrRegion(R.mana, ocrScale),
+      ocrRegion(R.title, ocrScale),
     ]);
   };
-  // Merge the split-box reads with the full-strip read: split boxes win when
-  // they parsed, the strip backfills XP (anchored to its EXP label). The strip
-  // is NEVER used for coins: the coin icon sits mid-strip right after the
-  // digits and OCR merges it into the number (live 1080p: "210 9.3" for
-  // 21 coins) — a corrupt backfill is worse than a missed one.
-  const parseRewards = (coinsText, expText, rewardsText) => {
-    let coins = parseOcrCoins(coinsText);
-    let xp = parseOcrXP(expText);
+  // The cleaned strip is the primary source for both values. Fallbacks only
+  // when it misses one: the coins box (parseOcrCoins trims an icon-merged
+  // third digit) and the exp box ONLY when it read a labelled "N EXP" — its
+  // bare first number is the event candy count now, not XP.
+  const parseRewards = (coinsText, expText, stripText) => {
+    let { coins, xp } = parseRewardStrip(stripText);
+    if (coins === null) coins = parseOcrCoins(coinsText);
     if (xp === null) {
-      const stripXP = (rewardsText || '').match(/(\d[\d.,]*)\s*(?:E\s*X\s*P|EXP|XP)/i);
-      if (stripXP) xp = parseFloat(stripXP[1].replace(/,/g, ''));
-      if (xp !== null && !Number.isFinite(xp)) xp = null;
-    }
-    if (xp === null) {
-      // Live 1440p: OCR dropped the "EXP" label from BOTH the exp box (read
-      // just "EXP", digits lost) and the strip ("210 9.3 <username> game
-      // lasted for 10 : 39") — the label anchor above found nothing. The
-      // reward row is always "coins+icon blob, then XP", so fall back to the
-      // second number of the first whitespace-adjacent pair. Username digits
-      // ("Umarurt123s") and the time ("10 : 39") can't pair up: letters and
-      // the colon break the adjacency.
-      const pair = (rewardsText || '').match(/(\d[\d.,]*)\s+(\d[\d.,]*)/);
-      if (pair) {
-        const n = parseFloat(pair[2].replace(/,/g, ''));
+      const labeled = (expText || '').match(/(\d[\d.,]*)\s*(?:E\s*X\s*P|EXP|XP)/i);
+      if (labeled) {
+        const n = parseFloat(labeled[1].replace(/,/g, ''));
         if (Number.isFinite(n)) xp = n;
       }
     }
     return { coins, xp };
   };
   const captureRoundRewards = () => {
-    const finish = (coins, xp, mana) => {
+    const finish = (coins, xp, mana, outcome) => {
       if (coins !== null) sessionCoins += coins;
       if (xp !== null) sessionXP = Math.round((sessionXP + xp) * 10) / 10;
       if (mana !== null) sessionMana = mana;
+      if (outcome === 'lost') sessionLosses += 1;
       // Pin a chart sample to the round itself, so the step up lands on the
       // real completion time rather than the next minute tick.
       sampleReportPoint();
-      sendRoundWebhook(coins, xp);
+      sendRoundWebhook(coins, xp, outcome);
     };
-    captureRewardsOnce().then(([coinsText, expText, rewardsText, manaText]) => {
-      ocrDebugLog(`round try1: coins="${coinsText}" exp="${expText}" strip="${rewardsText}" mana="${manaText}"`);
-      const { coins, xp } = parseRewards(coinsText, expText, rewardsText);
+    captureRewardsOnce().then(([coinsText, expText, stripText, manaText, titleText]) => {
+      const outcome = parseRoundOutcome(titleText);
+      ocrDebugLog(`round try1: title="${titleText}" (${outcome || '?'}) strip="${stripText}" coins="${coinsText}" exp="${expText}" mana="${manaText}"`);
+      const { coins, xp } = parseRewards(coinsText, expText, stripText);
       if (coins === null || xp === null) {
-        // Something's still missing — dialog may still be animating in.
-        // One more pass inside the 4s hold, keeping whatever try1 did get.
+        // Something's still missing — dialog may still be animating in. One
+        // more pass inside the macro's 5s hold, keeping whatever try1 got.
+        // Short delay: try1 alone takes ~2-3s (capture + cleaned-strip OCR).
         setTimeout(() => {
-          captureRewardsOnce().then(([c2, x2, r2, m2]) => {
-            ocrDebugLog(`round try2: coins="${c2}" exp="${x2}" strip="${r2}" mana="${m2}"`);
+          captureRewardsOnce().then(([c2, x2, r2, m2, t2]) => {
+            ocrDebugLog(`round try2: title="${t2}" strip="${r2}" coins="${c2}" exp="${x2}" mana="${m2}"`);
             const second = parseRewards(c2, x2, r2);
             finish(coins !== null ? coins : second.coins,
                    xp !== null ? xp : second.xp,
-                   parseOcrNumber(m2));
+                   parseOcrNumber(m2),
+                   outcome || parseRoundOutcome(t2));
           });
-        }, 1500);
+        }, 300);
       } else {
-        finish(coins, xp, parseOcrNumber(manaText));
+        finish(coins, xp, parseOcrNumber(manaText), outcome);
       }
     });
   };
@@ -1273,8 +1426,9 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
     console.error(msg);
     sendStatusUpdate(msg);
     postDiscordWebhook(makeEmbed({
-      title: '🛑 Restart-loop guard triggered',
-      description: msg,
+      title: 'Macro stopped: stuck restarting',
+      description: `Roblox was restarted ${streak} times in a row without finishing a round, `
+        + 'so Velora stopped the macro. Check that the game still loads and reaches the lobby.',
       color: 'error',
       ping: discordPing(),
     }), 'restarts');
@@ -1323,19 +1477,23 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
 
   // Arg 6: "1" = close the leftover roblox.com browser tab after launch.
   // Arg 7: launch method — 'auto' (deep link + browser fallback) or 'browser'.
+  // Arg 8: wait multiplier — "2" = slow mode (low-end PCs), "1" = normal.
   const launchSettings = loadSettings();
   const closeTabFlag = launchSettings.closeBrowserTab ? '1' : '0';
   const launchMethod = launchSettings.launchMethod === 'browser' ? 'browser' : 'auto';
-  const args = [scriptPath, action, map, difficulty, resParam, statusFile, closeTabFlag, launchMethod];
+  const slowFlag = launchSettings.slowMode ? '2' : '1';
+  const args = [scriptPath, action, map, difficulty, resParam, statusFile, closeTabFlag, launchMethod, slowFlag];
   console.log('Spawning AHK with args:', JSON.stringify(args));
   console.log('Total args count:', args.length);
   
   runningProcess = spawn(ahkPath, args);
 
   console.log('AHK process spawned, PID:', runningProcess.pid);
+  const startMins = reportIntervalMinutes(launchSettings);
   postDiscordWebhook(makeEmbed({
-    title: '▶️ Macro started',
-    description: `${map} — ${difficulty}`,
+    title: 'Macro started',
+    description: `**${map}** · ${difficulty}`
+      + (startMins ? `\nSession reports every ${startMins} minutes.` : ''),
     color: 'success',
   }), 'started');
 
@@ -1375,8 +1533,8 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
     try { fs.unlinkSync(statsFile); } catch (err) { /* ignore */ }
     console.error(`Error running AHK script: ${error.message}`);
     postDiscordWebhook(makeEmbed({
-      title: '⚠️ Macro failed to launch',
-      description: error.message,
+      title: 'Macro failed to start',
+      description: `\`\`\`\n${error.message}\n\`\`\``,
       color: 'error',
       ping: discordPing(),
     }), 'restarts');
@@ -1401,16 +1559,17 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
       rounds: statsRounds, coins: sessionCoins, xp: sessionXP, timeSec: stopSec,
     });
     const stoppedEmbed = makeEmbed({
-      title: '⏹ Macro stopped',
-      description: `**${map}** · ${difficulty} · ran for **${formatDuration(stopSec)}**`,
+      title: 'Macro stopped',
+      description: `**${map}** · ${difficulty} · ran for ${formatDuration(stopSec)}`,
       color: 'neutral',
       fields: [
-        { name: 'Rounds', value: String(statsRounds), inline: true },
-        { name: 'Coins', value: String(sessionCoins), inline: true },
-        { name: 'XP', value: String(sessionXP), inline: true },
-        { name: 'Session time', value: formatDuration(stopSec), inline: true },
+        { name: 'Rounds', value: fmtNum(statsRounds) + (sessionLosses ? ` (${fmtNum(sessionLosses)} lost)` : ''), inline: true },
+        { name: 'Coins', value: fmtNum(sessionCoins), inline: true },
+        { name: 'XP', value: fmtNum(sessionXP), inline: true },
+        { name: 'All time', value: `${plural(lifetime.rounds, 'round')} · ${fmtNum(lifetime.coins)} coins`
+          + ` · ${fmtNum(lifetime.xp)} XP · ${plural(lifetime.sessions, 'session')}` },
       ],
-      footer: `Lifetime: ${lifetime.rounds} rounds · ${lifetime.coins} coins · ${lifetime.xp} XP · ${lifetime.sessions} sessions`,
+      footer: statsRestarts ? `${plural(statsRestarts, 'restart')} this session` : null,
     });
     // With reports enabled the stop message doubles as the final report — same
     // embed, plus the chart for the whole session.
@@ -1435,7 +1594,7 @@ ipcMain.on('run-script', (event, action, map, difficulty, resolution) => {
     if (stderr) {
       console.error(`AHK stderr: ${stderr}`);
       postDiscordWebhook(makeEmbed({
-        title: '⚠️ Macro error output',
+        title: 'Macro error',
         description: `\`\`\`\n${stderr.trim().slice(0, 900)}\n\`\`\``,
         color: 'error',
         ping: discordPing(),
@@ -1527,6 +1686,45 @@ ipcMain.handle('install-update', () => {
   return true;
 });
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+// ---- Update notes -------------------------------------------------------
+// changelog.json ships with the app (newest first). On launch the renderer
+// asks for it; `unseen` is every entry newer than the last version this
+// install has shown notes for, capped at the running version. The "seen"
+// marker (settings.lastSeenVersion) is written right here, so the popup shows
+// once per update even if the user closes the app without dismissing it.
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  }
+  return 0;
+}
+ipcMain.handle('get-whats-new', () => {
+  let entries = [];
+  try {
+    entries = JSON.parse(fs.readFileSync(path.join(__dirname, 'changelog.json'), 'utf8'));
+  } catch (err) {
+    return { current: app.getVersion(), entries: [], unseen: [] };
+  }
+  const current = app.getVersion();
+  // Read the raw file, not loadSettings(): defaults would hide whether the
+  // key exists. No settings file at all = fresh install → nothing is "new".
+  // A settings file WITHOUT the key = updated from a version that predates
+  // update notes → show this version's notes only, not the whole history.
+  let raw = null;
+  try { raw = JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch (err) { /* fresh install */ }
+  let unseen = [];
+  if (raw && raw.lastSeenVersion) {
+    unseen = entries.filter((e) => compareVersions(e.version, raw.lastSeenVersion) > 0
+      && compareVersions(e.version, current) <= 0);
+  } else if (raw) {
+    unseen = entries.filter((e) => compareVersions(e.version, current) === 0);
+  }
+  if (!raw || raw.lastSeenVersion !== current) saveSettings({ lastSeenVersion: current });
+  return { current, entries: entries.filter((e) => compareVersions(e.version, current) <= 0), unseen };
+});
 
 // Open one of a fixed set of project links in the user's browser. Keyed rather
 // than URL-passing so the renderer can never hand shell.openExternal an
