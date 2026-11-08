@@ -38,7 +38,8 @@ The only official sources are:
 [![][downloads-shield]][downloads-link]
 [![][license-shield]][license-link]
 
-An open-source macro for the Roblox game *Tower Heroes*.
+An open-source macro for *Tower Heroes* that plays rounds for you while you're away.<br>
+Set it going, leave it running, and come back to a pile of coins.
 
 </div>
 
@@ -48,13 +49,17 @@ An open-source macro for the Roblox game *Tower Heroes*.
 2. Install [AutoHotkey v1.1][ahk-link] (not v2).
 3. Open Velora, pick a map and press **Play**.
 
-Velora updates itself after that. It needs Windows display scale at 100% and a 1080p, 1440p or 4K screen.
+That's it. Velora keeps itself up to date from there.
+
+> [!NOTE]
+> Velora needs Windows display scale at 100% and a 1080p, 1440p or 4K screen. It'll tell you on launch if something's off.
 
 ## Features
 
-- Live overlay with your session stats
-- Optional Discord notifications and reports
-- Recovers on its own if Roblox gets stuck
+- **Hands-off.** Joins your server, plays the round, collects and loops.
+- **Live overlay.** Keep an eye on your session stats while it runs.
+- **Discord reports.** Optional updates and a progress chart sent to your server.
+- **Recovers itself.** If Roblox freezes or disconnects, Velora restarts it and carries on.
 
 ## Hotkeys
 
@@ -66,7 +71,13 @@ Velora updates itself after that. It needs Windows display scale at 100% and a 1
 
 ## Help
 
-Ask in the [Discord server](https://discord.com/invite/VN3FNPXqea) or open an issue.
+Questions, bugs or ideas: come say hi in the Discord, or open an issue.
+
+<a href="https://discord.com/invite/VN3FNPXqea">
+  <img alt="Join the Velora Discord" src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=black">
+</a>
+
+If Velora saves you some grinding, a star on the repo is always appreciated.
 
 ## License
 
