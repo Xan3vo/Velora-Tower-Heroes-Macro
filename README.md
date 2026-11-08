@@ -52,7 +52,7 @@ Set it going, leave it running, and come back to a pile of coins.
 That's it. Velora keeps itself up to date from there.
 
 > [!NOTE]
-> Velora needs Windows display scale at 100% and a 1080p, 1440p or 4K screen. It'll tell you on launch if something's off.
+> Velora needs Windows display scale at 100% and a 1080p or 1440p screen. It'll tell you on launch if something's off.
 
 ## Features
 
