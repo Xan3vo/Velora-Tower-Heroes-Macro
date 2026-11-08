@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onStats: (cb) => ipcRenderer.on('stats-update', (_, stats) => cb(stats)),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.send('save-settings', settings),
-  launchInspector: () => ipcRenderer.send('launch-inspector'),
   testWebhook: (url) => ipcRenderer.invoke('test-webhook', url),
   testReport: (url) => ipcRenderer.invoke('test-report', url),
   getLifetimeStats: () => ipcRenderer.invoke('get-lifetime-stats'),

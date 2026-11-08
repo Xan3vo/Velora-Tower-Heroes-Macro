@@ -287,7 +287,7 @@ function createStatusWindow() {
 }
 
 // Resolve the AHK v1.1 interpreter, or show the friendly install dialog and
-// return null. Shared by the macro launcher and the pixel-inspector launcher.
+// return null.
 function resolveAhkOrPrompt(win) {
   const ahkPath = findAhkV1();
   if (ahkPath) return ahkPath;
@@ -319,39 +319,6 @@ function resolveAhkOrPrompt(win) {
   else if (choice === 1) shell.openExternal(AHK_WEBSITE_URL);
   return null;
 }
-
-// Launch an .ahk tool script detached from the app (copies to temp first so it
-// works in a packaged/asar build). Returns true if spawned.
-function launchAhkTool(scriptName, win) {
-  const ahkPath = resolveAhkOrPrompt(win);
-  if (!ahkPath) return false;
-
-  let scriptPath = path.join(__dirname, scriptName);
-  const tempScriptPath = path.join(require('os').tmpdir(), scriptName);
-  try {
-    fs.copyFileSync(scriptPath, tempScriptPath);
-    scriptPath = tempScriptPath;
-  } catch (err) {
-    console.error(`Could not copy ${scriptName} to temp:`, err);
-  }
-
-  try {
-    const proc = spawn(ahkPath, [scriptPath], { detached: true, stdio: 'ignore' });
-    proc.unref();
-    return true;
-  } catch (err) {
-    console.error(`Could not launch ${scriptName}:`, err);
-    return false;
-  }
-}
-
-ipcMain.on('launch-inspector', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const ok = launchAhkTool('PixelInspector.ahk', win);
-  event.sender.send('status-update', ok
-    ? 'Pixel Inspector launched — hover a pixel and press F8 (F9 to quit).'
-    : 'Error: could not launch Pixel Inspector.');
-});
 
 // ---- Persistent user settings ---------------------------------------------
 const SETTINGS_DEFAULTS = {

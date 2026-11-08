@@ -27,7 +27,8 @@
       "!README.md",
       "!LICENSE",
       "!.gitignore",
-      "!*.log"
+      "!*.log",
+      "!PixelInspector.ahk"
     ],
     "asar": false,
     "win": {
