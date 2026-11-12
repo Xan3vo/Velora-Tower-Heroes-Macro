@@ -726,7 +726,7 @@ ScrollMapListTop() {
     SleepWithStop(600)
 }
 
-; The special-maps button at the top of the list (logged with PixelInspector
+; The special-maps button at the top of the list (measured live
 ; at 1440p, 2026-07-18). Only valid with the list scrolled to the top.
 ClickSpecialMapsButton() {
     global scaleFactor
@@ -1253,7 +1253,7 @@ closeHeroY := Round(320  * scaleFactor)
 ;  maps), then open the hero menu once and check the hero-card slots.
 ;  A slot reading its logged "used up" color means that hero is placed;
 ;  all used up = the full loadout is on the field.
-;  Card-slot coords + "placed" colors were captured with PixelInspector.
+;  Card-slot coords + "placed" colors were measured live.
 ;
 ;  The grey cards fill top-down in PLACEMENT order, not loadout order: with
 ;  Kart Kid + Oddport down and Slime King missing, cards 1-2 are grey and
@@ -1265,8 +1265,8 @@ closeHeroY := Round(320  * scaleFactor)
 ; A placed hero greys its card slot out (~0x575857). An EMPTY slot is
 ; transparent, so its color depends on the background and can't be matched —
 ; we therefore only detect the grey "filled" state (grey = placed, anything
-; else = not placed). Slots 1/2 are real grey samples logged with
-; PixelInspector; slot 3 is extrapolated from their ~94px baseline pitch.
+; else = not placed). Slots 1/2 are real grey samples measured
+; live; slot 3 is extrapolated from their ~94px baseline pitch.
 CARD_GREY := 0x575857                  ; grey shown on a filled/used card slot
 CARD_TOL  := 24                        ; per-channel color tolerance
 cardX := [Round(1872 * scaleFactor), Round(1870 * scaleFactor), Round(1870 * scaleFactor)]
