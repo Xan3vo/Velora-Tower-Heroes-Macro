@@ -551,11 +551,6 @@ IsMaxedSmart(offsetY) {
 ;  MAP SELECTION (Maps tab list)
 ; ============================================================
 
-; All coords on the 2560x1440 baseline, from a user screenshot of the lobby:
-; tiles are ~141px apart, first tile top at y~512, titles in the tile's top
-; band, list column centered at x~1114. The left panel header (y~314) shows
-; the currently selected map's name.
-
 ; OCR the selected-map header in the left panel ("Castle Town", ...).
 OcrSelectedMapHeader() {
     global scaleFactor
@@ -568,28 +563,46 @@ OcrSelectedMapHeader() {
     return txt
 }
 
-; Find and click mapName's tile in the Maps list, scrolling if it isn't
-; visible. OCR-driven (tile titles), so it survives list reordering and new
-; maps; ImageSearch thumbnails wouldn't survive resolution changes. When OCR
-; is unavailable, falls back to fixed clicks for the maps visible without
-; scrolling. Returns true once the header confirms (or best-effort click).
-SelectMapTile(mapName) {
+; All coords on the 2560x1440 baseline. The Maps list's visible area runs
+; from y~405 (just under the tab bar) to y~1160, list column x 875-1355
+; (centre ~1114), tiles ~141px apart. At the very top of the list, above the
+; first map (Castle Town, tile top y~512), sits the special-maps button
+; (y~451); the special list holds Tama Park, Cake Factory, The Library, The
+; Outdoors, Knoddy's Resort, Metaverse Madness, Oddport Academy, ... (live OCR
+; log 2026-11-08). That button scrolls with the list, so it can only be
+; clicked once the list is scrolled to the top. The left panel header (y~314)
+; shows the currently selected map's name.
+
+; Find and click mapName's tile in the Maps list.
+; Reads the WHOLE visible list in one OCR pass with line positions (ocr.ps1
+; -Lines) and clicks the matching title where it actually is. The old version
+; OCR'd four fixed tile bands and scrolled four wheel ticks between reads; that
+; only lines up when one tick = one tile, which held at 1440p on the dev
+; machine but not for every user (2026-11-12: users' Oddport picks failing),
+; and it never scrolled back up, so a list that opened scrolled down (or
+; already in the special list) could never find the map or the special
+; button. Now: header already right -> done; otherwise scroll to the top, open
+; the special list if asked, scan down 2 ticks at a time (well under one
+; screen, whatever a tick is) until the list stops moving, and if the map
+; wasn't there, flip the special/normal list and scan again, until the
+; deadline. Returns true once the header confirms (or best-effort click).
+SelectMapTile(mapName, special := false) {
     global scaleFactor, slowMult
-    listX     := Round(1114 * scaleFactor)
-    firstTop  := 512    ; baseline y of the first tile's top edge
-    pitch     := 141    ; baseline distance between tile tops
-    slots     := 4      ; fully visible tiles per screen
+    listX := Round(1114 * scaleFactor)
 
-    ; Fixed fallbacks (no OCR): tiles visible without scrolling.
-    fallbackY := 0
-    if (mapName = "Corporate Chaos")
-        fallbackY := firstTop + pitch + 70
-    else if (mapName = "Glowing Glacier")
-        fallbackY := firstTop + (2 * pitch) + 70
+    ; The lobby remembers the last map, so it may already be selected.
+    if (MapNameMatch(OcrSelectedMapHeader(), mapName))
+        return true
 
-    ; Probe slot 0 (always has a title) to learn whether OCR works at all.
-    probe := OcrMapTileTitle(0, firstTop, pitch)
+    ScrollMapListTop()
+    probe := ReadMapList()
     if (probe = "") {
+        ; No OCR: fixed clicks for the maps visible at the top of the normal list.
+        fallbackY := 0
+        if (mapName = "Corporate Chaos")
+            fallbackY := 512 + 141 + 70
+        else if (mapName = "Glowing Glacier")
+            fallbackY := 512 + (2 * 141) + 70
         if (fallbackY = 0)
             return false
         cy := Round(fallbackY * scaleFactor)
@@ -599,41 +612,128 @@ SelectMapTile(mapName) {
     }
 
     deadline := A_TickCount + 45000 * slowMult
+    flip := special
     Loop {
         CheckForStop()
-        Loop, %slots% {
-            i := A_Index - 1
-            txt := (probe != "") ? probe : OcrMapTileTitle(i, firstTop, pitch)
-            probe := ""   ; the probe read doubles as slot 0's first read
-            if (MapNameMatch(txt, mapName)) {
-                cy := Round((firstTop + (pitch * i) + 80) * scaleFactor)
-                MouseClick, left, %listX%, %cy%
-                SleepWithStop(1200)
-                ; Verify via the left-panel header; a miss = keep searching.
-                ; One re-read first: the panel can still be mid-update.
+        if (flip) {
+            ClickSpecialMapsButton()
+            ScrollMapListTop()
+            probe := ""
+        }
+        if (ScanMapList(mapName, deadline, probe))
+            return true
+        if (A_TickCount >= deadline)
+            return false
+        ; Not in this list. Back to the top and flip normal <-> special: covers
+        ; a list that was left in the special view, and the button acting as a
+        ; toggle (or a back button in the same spot).
+        ScrollMapListTop()
+        probe := ""
+        flip := true
+    }
+}
+
+; Scan the list downward from where it is. probe = an already-taken read of the
+; current view ("" = read it now). True once mapName is clicked and the header
+; agrees; false at the bottom of the list or the deadline.
+ScanMapList(mapName, deadline, probe := "") {
+    global scaleFactor
+    listX := Round(1114 * scaleFactor)
+    topY  := Round(405 * scaleFactor)
+    viewH := Round(755 * scaleFactor)
+    inset := Round(35 * scaleFactor)   ; title centre -> tile body, still on the tile
+    prev  := "-"
+    Loop, 30 {
+        CheckForStop()
+        view := (probe != "") ? probe : ReadMapList()
+        probe := ""
+        ; Each OCR line is "<y>|<text>", y relative to the top of the view.
+        Loop, Parse, view, `n, `r
+        {
+            bar := InStr(A_LoopField, "|")
+            if (!bar)
+                continue
+            ly := SubStr(A_LoopField, 1, bar - 1) + 0
+            if (!MapNameMatch(SubStr(A_LoopField, bar + 1), mapName))
+                continue
+            if (ly + inset > viewH - inset)
+                continue   ; title at the bottom edge: its tile is cut off, scroll first
+            cy := topY + ly + inset
+            MouseClick, left, %listX%, %cy%
+            SleepWithStop(1200)
+            ; Verify via the left-panel header; one re-read first, the panel
+            ; can still be mid-update. A clear mismatch = keep scanning.
+            hdr := OcrSelectedMapHeader()
+            if (hdr != "" && !MapNameMatch(hdr, mapName)) {
+                SleepWithStop(800)
                 hdr := OcrSelectedMapHeader()
-                if (hdr != "" && !MapNameMatch(hdr, mapName)) {
-                    SleepWithStop(800)
-                    hdr := OcrSelectedMapHeader()
-                }
-                if (hdr = "" || MapNameMatch(hdr, mapName))
-                    return true
             }
+            if (hdr = "" || MapNameMatch(hdr, mapName))
+                return true
         }
         if (A_TickCount >= deadline)
             return false
-        ; Not on screen — hover the list (a click would select a map) and
-        ; scroll down a full screenful (one tick barely moves the list, so
-        ; rescanning after each tick mostly re-reads the same tiles), then
-        ; re-read.
-        hoverY := Round(800 * scaleFactor)
-        MouseMove, %listX%, %hoverY%
-        Loop, 4 {
-            Send, {WheelDown}
-            SleepWithStop(150)
-        }
-        SleepWithStop(700)
+        ; Same text as the last read = the list didn't move: bottom reached.
+        norm := MapNameNorm(view)
+        if (norm = prev)
+            return false
+        prev := norm
+        ScrollMapList("WheelDown", 2)
+        SleepWithStop(600)
     }
+    return false
+}
+
+; OCR the whole visible list; returns "<y>|<text>" lines ("" = OCR unavailable).
+ReadMapList() {
+    global scaleFactor
+    x := Round(875 * scaleFactor)
+    y := Round(405 * scaleFactor)
+    w := Round(480 * scaleFactor)
+    h := Round(755 * scaleFactor)
+    psPath := A_ScriptDir . "\ocr.ps1"
+    if (!FileExist(psPath))
+        return ""
+    outFile := A_Temp . "\towerheroes-ocr-read.txt"
+    FileDelete, %outFile%
+    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ . psPath . """"
+         . " -X " . x . " -Y " . y . " -W " . w . " -H " . h . " -Lines"
+         . " -OutFile """ . outFile . """"
+    RunWait, %cmd%, , Hide
+    if (!FileExist(outFile))
+        return ""
+    FileRead, txt, %outFile%
+    txt := Trim(txt, " `t`r`n")
+    FileAppend, % A_Now . " mapList: """ . StrReplace(StrReplace(txt, "`r"), "`n", " / ") . """`n", %A_Temp%\towerheroes-ocr-ahk.log
+    return txt
+}
+
+; Hover the list (a click would select a map) and send wheel ticks.
+ScrollMapList(dir, ticks) {
+    global scaleFactor
+    hx := Round(1114 * scaleFactor)
+    hy := Round(800 * scaleFactor)
+    MouseMove, %hx%, %hy%
+    Loop, %ticks% {
+        Send, {%dir%}
+        SleepWithStop(60)
+    }
+}
+
+; Scroll all the way up (more ticks than the longest list needs).
+ScrollMapListTop() {
+    ScrollMapList("WheelUp", 30)
+    SleepWithStop(600)
+}
+
+; The special-maps button at the top of the list (logged with PixelInspector
+; at 1440p, 2026-07-18). Only valid with the list scrolled to the top.
+ClickSpecialMapsButton() {
+    global scaleFactor
+    sx := Round(1106 * scaleFactor)
+    sy := Round(451  * scaleFactor)
+    MouseClick, left, %sx%, %sy%
+    SleepWithStop(1000)
 }
 
 ; True if OCR text txt names mapName, tolerating the misreads Roblox's
@@ -667,18 +767,6 @@ MapNameNorm(s) {
     StringLower, s, s
     s := RegExReplace(s, "[^a-z]")
     return StrReplace(s, "i", "l")
-}
-
-; OCR the title band of list slot i (0-based, top to bottom).
-OcrMapTileTitle(i, firstTop, pitch) {
-    global scaleFactor
-    x := Round(875 * scaleFactor)
-    y := Round((firstTop + (pitch * i)) * scaleFactor)
-    w := Round(480 * scaleFactor)
-    h := Round(110 * scaleFactor)   ; taller than the title so scroll drift still catches it
-    txt := OcrScreenRegion(x, y, w, h)
-    FileAppend, % A_Now . " mapTile[" . i . "]: """ . txt . """`n", %A_Temp%\towerheroes-ocr-ahk.log
-    return txt
 }
 
 ; ============================================================
@@ -1060,17 +1148,9 @@ if (selectedMap != "Castle Town") {
     MouseClick, left, %mapsTabX%, %mapsTabY%
     SleepWithStop(1000)
     CheckForStop()
-    ; Oddport Academy is a SPECIAL map: its tile lives behind an extra
-    ; special-maps button (logged with PixelInspector at 1440p) that must be
-    ; clicked before the tile list is scanned/scrolled.
-    if (selectedMap = "Oddport Academy") {
-        specialX := Round(1106 * scaleFactor)
-        specialY := Round(451  * scaleFactor)
-        MouseClick, left, %specialX%, %specialY%
-        SleepWithStop(1000)
-        CheckForStop()
-    }
-    if (!SelectMapTile(selectedMap)) {
+    ; Oddport Academy is a SPECIAL map: it lives in the list behind the
+    ; special-maps button, which SelectMapTile clicks after scrolling to the top.
+    if (!SelectMapTile(selectedMap, selectedMap = "Oddport Academy")) {
         UpdateStatus("Could not find map '" . selectedMap . "' — full restart")
         Goto FullRestart
     }

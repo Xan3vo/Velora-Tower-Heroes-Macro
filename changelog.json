@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.6.2",
+    "date": "2026-11-12",
+    "notes": [
+      "Map selection reads the whole map list at once, so it no longer scrolls past the map it's looking for.",
+      "Oddport Academy is selected reliably, even when the map list doesn't open at the top.",
+      "Fixed the display scaling error showing for people at 100% scale who have Windows text size turned up."
+    ]
+  },
+  {
     "version": "1.6.1",
     "date": "2026-11-08",
     "notes": [

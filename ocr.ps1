@@ -3,6 +3,8 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File ocr.ps1 -X 1600 -Y 620 -W 240 -H 70 [-Digits]
 #   powershell -ExecutionPolicy Bypass -File ocr.ps1 -File C:\path\img.png [-Digits]
+#   ... -Lines   prints one "<centerY>|<text>" per line instead (y in capture
+#                pixels, top of the region = 0) so callers can click a match
 #
 # Captures a screen rectangle (or reads an image file), runs Windows.Media.Ocr,
 # and prints the recognized text to stdout. With -Digits, prints only the digits
@@ -20,6 +22,7 @@ param(
     [int]$Scale = 3,
     [int]$Pad = 8,
     [switch]$Digits,
+    [switch]$Lines,     # one "<centerY>|<text>" per OCR line (y in capture pixels)
     [switch]$NoRetry    # internal: set on self-spawned retry passes
 )
 
@@ -104,6 +107,15 @@ try {
         $softwareBitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
         $result = Await ($engine.RecognizeAsync($softwareBitmap)) ([Windows.Media.Ocr.OcrResult])
+        if ($Lines) {
+            # Map each line back to capture pixels: undo the pad, then the upscale.
+            $rows = foreach ($ln in $result.Lines) {
+                $top = ($ln.Words | ForEach-Object { $_.BoundingRect.Y } | Measure-Object -Minimum).Minimum
+                $bot = ($ln.Words | ForEach-Object { $_.BoundingRect.Y + $_.BoundingRect.Height } | Measure-Object -Maximum).Maximum
+                "{0}|{1}" -f [int]((($top + $bot) / 2 - $Pad) / $passScale), $ln.Text
+            }
+            return ($rows -join "`n")
+        }
         return $result.Text
     }
 
@@ -119,8 +131,13 @@ try {
         $tmpPng = Join-Path $env:TEMP ("towerheroes-ocr-retry-" + $PID + ".png")
         $src.Save($tmpPng, [System.Drawing.Imaging.ImageFormat]::Png)
         foreach ($retryScale in ($Scale + 2), ($Scale + 3)) {
-            $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -File $tmpPng -Scale $retryScale -NoRetry
-            $out = ($out -join ' ').Trim()
+            if ($Lines) {
+                $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -File $tmpPng -Scale $retryScale -NoRetry -Lines
+                $out = ($out -join "`n").Trim()
+            } else {
+                $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -File $tmpPng -Scale $retryScale -NoRetry
+                $out = ($out -join ' ').Trim()
+            }
             if ($out -ne "") { $text = $out; break }
         }
         Remove-Item $tmpPng -ErrorAction SilentlyContinue

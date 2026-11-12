@@ -643,9 +643,7 @@ ipcMain.handle('test-ocr-region', async (e, region) => {
   const r = region || {};
   const valid = [r.x, r.y, r.w, r.h].every((v) => Number.isFinite(v)) && r.w > 0 && r.h > 0;
   if (!valid) return { ok: false, error: 'Invalid region (need numeric X/Y and positive W/H)' };
-  const { screen } = require('electron');
-  const d = screen.getPrimaryDisplay();
-  const physW = Math.round(d.size.width * (d.scaleFactor || 1));
+  const { physW } = getPrimaryDisplayPhysical();
   const text = await ocrRegion({ x: r.x, y: r.y, w: r.w, h: r.h }, physW / 2560);
   return { ok: true, text };
 });
@@ -928,16 +926,46 @@ const SUPPORTED_RESOLUTIONS = [
 // macro supports. Returns { ok, physW, physH, scalePct, title, detail }.
 // Mirrors the checks inside TowerHeroesMacro.ahk, but runs up front so the user
 // is told before Roblox launches — not after a confusing restart loop.
-function checkDisplaySupport() {
+// Windows' Accessibility > Text size (100-225%). Chromium multiplies it into
+// display.scaleFactor, so a user at 100% Display Scale with Text size 112%
+// reports scaleFactor 1.12 and used to be told "scaling is 112%" (user
+// report 2026-11-12). Text size doesn't move anything the macro clicks (the
+// macro's own GDI DPI check ignores it too), so it's divided back out.
+function getTextScaleFactor() {
+  try {
+    const out = execSync('reg query "HKCU\\Software\\Microsoft\\Accessibility" /v TextScaleFactor',
+      { encoding: 'utf8', windowsHide: true, timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const m = out.match(/TextScaleFactor\s+REG_DWORD\s+0x([0-9a-f]+)/i);
+    const pct = m ? parseInt(m[1], 16) : 100;
+    return pct >= 100 && pct <= 225 ? pct / 100 : 1;
+  } catch (err) {
+    return 1; // value absent = Text size never changed (100%)
+  }
+}
+
+// Primary display in PHYSICAL pixels plus the real Display Scale (text size
+// factored out). Used by the startup check and the OCR scale.
+function getPrimaryDisplayPhysical() {
   const { screen } = require('electron');
   const d = screen.getPrimaryDisplay();
-  const scale = d.scaleFactor || 1;
-  const scalePct = Math.round(scale * 100);
-  // .size is in DIPs; multiply by scaleFactor to recover physical pixels.
-  const physW = Math.round(d.size.width * scale);
-  const physH = Math.round(d.size.height * scale);
+  const raw = d.scaleFactor || 1;
+  let physW, physH;
+  try {
+    // Exact physical bounds; DIP size * scaleFactor can round off by 1px.
+    const r = screen.dipToScreenRect(null, d.bounds);
+    physW = r.width; physH = r.height;
+  } catch (err) {
+    physW = Math.round(d.size.width * raw);
+    physH = Math.round(d.size.height * raw);
+  }
+  return { physW, physH, scale: raw / getTextScaleFactor() };
+}
 
-  if (scale !== 1) {
+function checkDisplaySupport() {
+  const { physW, physH, scale } = getPrimaryDisplayPhysical();
+  const scalePct = Math.round(scale * 100);
+
+  if (Math.abs(scale - 1) > 0.01) {
     return {
       ok: false,
       physW, physH, scalePct,
@@ -948,25 +976,22 @@ function checkDisplaySupport() {
     };
   }
 
-  // NOTE: this exact match is only reached when scale === 1 (the check above
-  // returns otherwise), so DIP size equals physical pixels and there's no
-  // rounding error. At non-100% scale, physW can round off by 1px
-  // (e.g. 1707 DIP * 1.5 = 2560.5 -> 2561) — but we never get here in that case.
-  const supported = SUPPORTED_RESOLUTIONS.some(([w, h]) => w === physW && h === physH);
-  if (!supported) {
-    return {
-      ok: false,
-      physW, physH, scalePct,
-      title: 'Unsupported Resolution',
-      detail:
-        `Your resolution (${physW}x${physH}) isn't supported.\n\n` +
-        'Fix: Settings > System > Display > Display resolution — set it to one of:\n' +
-        '   - 2560 x 1440\n   - 1920 x 1080\n\n' +
-        'Then start the macro again.',
-    };
-  }
-
-  return { ok: true, physW, physH, scalePct };
+  // physW/physH can be off by a pixel: the text-size factor makes the DIP size
+  // fractional (2560 / 1.12) and Electron rounds it (dipToScreenRect too —
+  // seen 2561 for 2560 at 150%). Snap to a supported size within 2px.
+  const supported = SUPPORTED_RESOLUTIONS.find(([w, h]) =>
+    Math.abs(w - physW) <= 2 && Math.abs(h - physH) <= 2);
+  if (supported) return { ok: true, physW: supported[0], physH: supported[1], scalePct };
+  return {
+    ok: false,
+    physW, physH, scalePct,
+    title: 'Unsupported Resolution',
+    detail:
+      `Your resolution (${physW}x${physH}) isn't supported.\n\n` +
+      'Fix: Settings > System > Display > Display resolution — set it to one of:\n' +
+      '   - 2560 x 1440\n   - 1920 x 1080\n\n' +
+      'Then start the macro again.',
+  };
 }
 
 // Window control IPC handlers
