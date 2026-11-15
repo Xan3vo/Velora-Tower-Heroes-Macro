@@ -197,6 +197,18 @@ SleepWithStop(ms) {
         Sleep, %remainder%
 }
 
+; Wait after a MENU/LOBBY click (auto-skip settings, lobby, Maps tab, map
+; tiles, hero panel close). Same as SleepWithStop, but slow mode never
+; waits less than 2.5s: doubling 500ms to 1s was still too fast for a
+; low-end PC to open the menu before the next click (user report
+; 2026-11-15). Not for in-game actions (hero keys, upgrades, camera).
+ClickGap(ms) {
+    global slowMult
+    if (slowMult > 1 && ms * slowMult < 2500)
+        ms := Ceil(2500 / slowMult)
+    SleepWithStop(ms)
+}
+
 ; ============================================================
 ;  LEFTOVER BROWSER TAB CLEANUP
 ; ============================================================
@@ -388,13 +400,13 @@ CheckAutoSkip() {
     settingsX := Round(106  * scaleFactor)
     settingsY := Round(991  * scaleFactor)
     MouseClick, Left, %settingsX%, %settingsY%
-    SleepWithStop(500)
+    ClickGap(500)
 
     ; Open interference settings
     interfX := Round(1127 * scaleFactor)
     interfY := Round(479  * scaleFactor)
     MouseClick, Left, %interfX%, %interfY%
-    SleepWithStop(500)
+    ClickGap(500)
 
     ; Check auto-skip toggle color
     checkX        := Round(722 * scaleFactor)
@@ -407,7 +419,7 @@ CheckAutoSkip() {
         closeX := Round(1866 * scaleFactor)
         closeY := Round(383  * scaleFactor)
         MouseClick, Left, %closeX%, %closeY%
-        SleepWithStop(300)
+        ClickGap(300)
         return true
     }
 
@@ -416,7 +428,7 @@ CheckAutoSkip() {
     toggleX := Round(728 * scaleFactor)
     toggleY := Round(795 * scaleFactor)
     MouseClick, Left, %toggleX%, %toggleY%
-    SleepWithStop(300)
+    ClickGap(300)
 
     ; Verify
     PixelGetColor, newColor, %checkX%, %checkY%, RGB
@@ -428,7 +440,7 @@ CheckAutoSkip() {
     closeX := Round(1868 * scaleFactor)
     closeY := Round(383  * scaleFactor)
     Click, %closeX%, %closeY%
-    SleepWithStop(300)
+    ClickGap(300)
     return true
 }
 
@@ -607,7 +619,7 @@ SelectMapTile(mapName, special := false) {
             return false
         cy := Round(fallbackY * scaleFactor)
         MouseClick, left, %listX%, %cy%
-        SleepWithStop(800)
+        ClickGap(800)
         return true
     }
 
@@ -660,7 +672,7 @@ ScanMapList(mapName, deadline, probe := "") {
                 continue   ; title at the bottom edge: its tile is cut off, scroll first
             cy := topY + ly + inset
             MouseClick, left, %listX%, %cy%
-            SleepWithStop(1200)
+            ClickGap(1200)
             ; Verify via the left-panel header; one re-read first, the panel
             ; can still be mid-update. A clear mismatch = keep scanning.
             hdr := OcrSelectedMapHeader()
@@ -733,7 +745,7 @@ ClickSpecialMapsButton() {
     sx := Round(1106 * scaleFactor)
     sy := Round(451  * scaleFactor)
     MouseClick, left, %sx%, %sy%
-    SleepWithStop(1000)
+    ClickGap(1000)
 }
 
 ; True if OCR text txt names mapName, tolerating the misreads Roblox's
@@ -760,7 +772,38 @@ MapNameMatch(txt, mapName) {
         if (StrLen(w) >= 6 && InStr(t, w))
             return true
     }
-    return false
+    ; OCR typos: the whole name within 1 edit per 5 letters of some stretch of
+    ; the text. Live 1440p read Corporate Chaos as "Corprate Chaos" — the
+    ; misspelled word was the only long one ("chaos" is under 6), so it never
+    ; matched and users' Corporate Chaos picks scrolled past it (2026-11-15).
+    ; Checked against every map title seen in the lobby (24 + list labels): no
+    ; other map comes within 3 edits of a supported one.
+    n := MapNameNorm(mapName)
+    return FuzzyFindDistance(n, t) <= StrLen(n) // 5
+}
+
+; Smallest edit distance between pattern p and ANY substring of t
+; (Levenshtein with a free start/end in t).
+FuzzyFindDistance(p, t) {
+    m := StrLen(p), n := StrLen(t)
+    prev := []
+    Loop, % n + 1
+        prev[A_Index] := 0
+    Loop, %m% {
+        i := A_Index
+        pc := SubStr(p, i, 1)
+        cur := [i]
+        Loop, %n% {
+            j := A_Index
+            cost := (pc == SubStr(t, j, 1)) ? 0 : 1
+            cur[j + 1] := Min(prev[j] + cost, prev[j + 1] + 1, cur[j] + 1)
+        }
+        prev := cur
+    }
+    best := m
+    Loop, % n + 1
+        best := Min(best, prev[A_Index])
+    return best
 }
 
 MapNameNorm(s) {
@@ -816,7 +859,7 @@ PlaceHeroByCard(hotkey, label, cardCheckX, cardCheckY, closeHeroX, closeHeroY) {
 
         UpdateStatus(label " not placed, retrying")
         MouseClick, left, %closeHeroX%, %closeHeroY%
-        SleepWithStop(1000)
+        ClickGap(1000)
     }
 }
 
@@ -848,7 +891,7 @@ PlaceSlimeKing(closeHeroX, closeHeroY) {
 
         UpdateStatus("Slime King not placed, retrying")
         MouseClick, left, %closeHeroX%, %closeHeroY%
-        SleepWithStop(1000)
+        ClickGap(1000)
     }
 }
 
@@ -1106,7 +1149,9 @@ Loop {
     SleepWithStop(1000)
 }
 
-SleepWithStop(500)
+; The Play button shows before a slow PC is ready for input, so slow
+; mode lets it settle (6s) before the first menu click.
+SleepWithStop(slowMult > 1 ? 3000 : 500)
 UpdateStatus("Game loaded — checking auto-skip")
 CheckAutoSkip()
 SleepWithStop(3000)
@@ -1118,7 +1163,7 @@ SleepWithStop(3000)
 ; routes to FullRestart.
 UpdateStatus("Starting Game")
 WinActivate, ahk_exe RobloxPlayerBeta.exe
-SleepWithStop(500)
+ClickGap(500)
 
 ; --- Lobby clicks ---
 x1 := Round(80  * scaleFactor) , y1 := Round(813  * scaleFactor)
@@ -1128,13 +1173,13 @@ x4 := Round(427 * scaleFactor) , y4 := Round(541  * scaleFactor)
 x5 := Round(327 * scaleFactor) , y5 := Round(1131 * scaleFactor)
 
 MouseClick, left, %x1%, %y1%
-SleepWithStop(1000)
+ClickGap(1000)
 CheckForStop()
 MouseClick, left, %x2%, %y2%
-SleepWithStop(1000)
+ClickGap(1000)
 CheckForStop()
 MouseClick, left, %x3%, %y3%
-SleepWithStop(1000)
+ClickGap(1000)
 CheckForStop()
 
 ; --- Map selection ---
@@ -1146,7 +1191,7 @@ if (selectedMap != "Castle Town") {
     mapsTabX := Round(1119 * scaleFactor)
     mapsTabY := Round(349  * scaleFactor)
     MouseClick, left, %mapsTabX%, %mapsTabY%
-    SleepWithStop(1000)
+    ClickGap(1000)
     CheckForStop()
     ; Oddport Academy is a SPECIAL map: it lives in the list behind the
     ; special-maps button, which SelectMapTile clicks after scrolling to the top.
@@ -1155,15 +1200,15 @@ if (selectedMap != "Castle Town") {
         Goto FullRestart
     }
     UpdateStatus("Map selected: " . selectedMap)
-    SleepWithStop(1000)
+    ClickGap(1000)
     CheckForStop()
 }
 
 MouseClick, left, %x4%, %y4%
-SleepWithStop(1000)
+ClickGap(1000)
 CheckForStop()
 MouseClick, left, %x5%, %y5%
-SleepWithStop(1000)
+ClickGap(1000)
 SleepWithStop(10000)
 
 ; --- Wait for ready button ---
@@ -1334,7 +1379,7 @@ Loop {
 
     ; Close the menu before retrying the placement sequence.
     MouseClick, left, %closeHeroX%, %closeHeroY%
-    SleepWithStop(1000)
+    ClickGap(1000)
 }
 
 ; ============================================================
@@ -1414,7 +1459,7 @@ if (robloxDead)
 ; ============================================================
 
 MouseClick, left, %closeHeroX%, %closeHeroY%
-SleepWithStop(500)
+ClickGap(500)
 UpdateStatus("Waiting for map completion")
 SleepWithStop(10000)
 

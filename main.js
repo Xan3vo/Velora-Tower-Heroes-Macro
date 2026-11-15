@@ -1730,10 +1730,29 @@ ipcMain.on('open-link', (event, key) => {
   if (url) shell.openExternal(url);
 });
 
-app.whenReady().then(() => {
-  createWindow();
-  setupAutoUpdater();
-});
+// One copy at a time. A second launch would register no hotkeys (F1/F3/F4
+// belong to the first) and could start a second macro fighting the first
+// over the mouse, so it just brings the running copy to the front (same as
+// F4) and exits. The updater's relaunch is unaffected: the old copy has quit
+// and released the lock before the installer starts the new one.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const mainWindow = BrowserWindow.getAllWindows().find(win => win !== statusWindow);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    if (statusWindow && !statusWindow.isDestroyed()) statusWindow.show();
+  });
+
+  app.whenReady().then(() => {
+    createWindow();
+    setupAutoUpdater();
+  });
+}
 
 // Closing the app must take the macro down with it — an orphaned AHK process
 // keeps clicking the screen with no way to stop it except Task Manager (and a

@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.6.3",
+    "date": "2026-11-15",
+    "notes": [
+      "Corporate Chaos gets selected again. Map names now match even when they're read slightly wrong.",
+      "Only one copy of the app can run at a time. Opening it again brings up the one that's already open.",
+      "Slow mode leaves more time between menu clicks."
+    ]
+  },
+  {
     "version": "1.6.2",
     "date": "2026-11-12",
     "notes": [

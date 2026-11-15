@@ -1418,7 +1418,7 @@
     { key: 'restartLoopGuard', label: 'Restart-loop guard',
       desc: 'Stop the macro after 5 straight restarts without completing a round (and ping you on Discord, if set below).' },
     { key: 'slowMode', label: 'Slow mode',
-      desc: 'For low-end PCs. Doubles the wait between clicks and gives Roblox twice as long to load before the macro restarts it. Applies on next run.' }
+      desc: 'For low-end PCs. Leaves at least 2.5 seconds between menu clicks, waits for the game to settle after it loads, and gives Roblox twice as long to load before the macro restarts it. Applies on next run.' }
   ];
   // Per-event webhook toggles (mirrors SETTINGS_DEFAULTS.webhookEvents in main.js).
   var WEBHOOK_EVENTS_META = [
